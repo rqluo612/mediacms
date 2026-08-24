@@ -1,0 +1,97 @@
+services:
+  migrations:
+    image: ${MEDIACMS_IMAGE:-mediacms/mediacms:latest}
+    env_file:
+      - ${PRODUCTION_ENV_FILE:-.env.production}
+    volumes:
+      - ./:/home/mediacms.io/mediacms/
+    environment:
+      ENABLE_UWSGI: "no"
+      ENABLE_NGINX: "no"
+      ENABLE_CELERY_SHORT: "no"
+      ENABLE_CELERY_LONG: "no"
+      ENABLE_CELERY_BEAT: "no"
+      ENABLE_MIGRATIONS: "yes"
+    command: "./deploy/docker/prestart.sh"
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    image: ${MEDIACMS_IMAGE:-mediacms/mediacms:latest}
+    env_file:
+      - ${PRODUCTION_ENV_FILE:-.env.production}
+    ports:
+      - "127.0.0.1:${APP_HTTP_PORT:-8080}:80"
+    volumes:
+      - ./:/home/mediacms.io/mediacms/
+    environment:
+      ENABLE_MIGRATIONS: "no"
+      ENABLE_CELERY_BEAT: "no"
+      ENABLE_CELERY_SHORT: "no"
+      ENABLE_CELERY_LONG: "no"
+    restart: unless-stopped
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+
+  celery_worker:
+    image: ${MEDIACMS_WORKER_IMAGE:-mediacms/mediacms:full}
+    env_file:
+      - ${PRODUCTION_ENV_FILE:-.env.production}
+    volumes:
+      - ./:/home/mediacms.io/mediacms/
+    environment:
+      ENABLE_UWSGI: "no"
+      ENABLE_NGINX: "no"
+      ENABLE_CELERY_BEAT: "no"
+      ENABLE_MIGRATIONS: "no"
+    restart: unless-stopped
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+
+  celery_beat:
+    image: ${MEDIACMS_IMAGE:-mediacms/mediacms:latest}
+    env_file:
+      - ${PRODUCTION_ENV_FILE:-.env.production}
+    volumes:
+      - ./:/home/mediacms.io/mediacms/
+    environment:
+      ENABLE_UWSGI: "no"
+      ENABLE_NGINX: "no"
+      ENABLE_CELERY_SHORT: "no"
+      ENABLE_CELERY_LONG: "no"
+      ENABLE_MIGRATIONS: "no"
+    restart: unless-stopped
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+
+  db:
+    image: postgres:17.2-alpine
+    env_file:
+      - ${PRODUCTION_ENV_FILE:-.env.production}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data/
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

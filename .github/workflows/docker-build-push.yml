@@ -1,0 +1,78 @@
+name: Docker build and push
+
+on:
+  workflow_call:
+  push:
+    tags:
+      - v*.*.*
+
+jobs:
+  release:
+    name: Build & release to DockerHub
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2.2.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker meta for base image
+        id: meta-base
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            mediacms/mediacms
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          labels: |
+            org.opencontainers.image.title=MediaCMS
+            org.opencontainers.image.description=MediaCMS is a modern, fully featured open source video and media CMS, written in Python/Django and React, featuring a REST API.
+            org.opencontainers.image.vendor=MediaCMS
+            org.opencontainers.image.url=https://mediacms.io/
+            org.opencontainers.image.source=https://github.com/mediacms-io/mediacms
+            org.opencontainers.image.licenses=AGPL-3.0
+
+      - name: Docker meta for full image
+        id: meta-full
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            mediacms/mediacms
+          tags: |
+            type=raw,value=full,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            type=semver,pattern={{version}}-full
+            type=semver,pattern={{major}}.{{minor}}-full
+            type=semver,pattern={{major}}-full
+          labels: |
+            org.opencontainers.image.title=MediaCMS Full
+            org.opencontainers.image.description=MediaCMS is a modern, fully featured open source video and media CMS, written in Python/Django and React, featuring a REST API. This is the full version with additional dependencies.
+            org.opencontainers.image.vendor=MediaCMS
+            org.opencontainers.image.url=https://mediacms.io/
+            org.opencontainers.image.source=https://github.com/mediacms-io/mediacms
+            org.opencontainers.image.licenses=AGPL-3.0
+
+      - name: Build and push full image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          target: full
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-full.outputs.tags }}
+          labels: ${{ steps.meta-full.outputs.labels }}
+
+      - name: Build and push base image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          target: base
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-base.outputs.tags }}
+          labels: ${{ steps.meta-base.outputs.labels }}

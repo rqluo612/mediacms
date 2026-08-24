@@ -1,0 +1,37 @@
+{% block messages %}
+
+{% if messages %}
+
+{% for message in messages %}
+	<div class="alert {{ message.tags }} alert-dismissible" role="alert">
+    	<button type="button" class="close" data-dismiss="alert" aria-label="Close">
+      		<span aria-hidden="true">&times;</span>
+    	</button>
+    	{{ message }}
+  	</div>
+{% endfor %}
+
+<script>
+    // This script is necessary because the React-based PageHeader component (which handles alert dismissal)
+    // is not mounted on all Django-rendered pages. This ensures the close button works globally.
+    document.addEventListener('DOMContentLoaded', function() {
+        var closeButtons = document.querySelectorAll('.alert .close');
+        closeButtons.forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                var alert = this.closest('.alert');
+                if (alert) {
+                    alert.classList.add('hiding');
+                    setTimeout(function() {
+                        if (alert.parentNode) {
+                            alert.parentNode.removeChild(alert);
+                        }
+                    }, 400);
+                }
+            });
+        });
+    });
+</script>
+
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,104 @@
+.api-error-notifier {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 10020;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  width: min(26rem, calc(100vw - 2rem));
+  padding: 1rem;
+  color: #fff;
+  background: #263238;
+  border-left: 0.3rem solid #ffb300;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.3);
+  animation: api-notice-enter 180ms ease-out;
+}
+
+.api-error-notifier--network,
+.api-error-notifier--server {
+  border-left-color: #ef5350;
+}
+
+.api-error-notifier--authentication,
+.api-error-notifier--private,
+.api-error-notifier--forbidden {
+  border-left-color: #ffca28;
+}
+
+.api-error-notifier--rate-limit {
+  border-left-color: #42a5f5;
+}
+
+.api-error-notifier__icon {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  font-weight: 800;
+  color: #20252a;
+  background: #ffca28;
+  border-radius: 50%;
+}
+
+.api-error-notifier__content {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  line-height: 1.4;
+
+  strong {
+    font-size: 0.95rem;
+  }
+
+  span {
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+  }
+}
+
+.api-error-notifier__close {
+  padding: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: #fff;
+  }
+}
+
+@keyframes api-notice-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 600px) {
+  .api-error-notifier {
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .api-error-notifier {
+    animation: none;
+  }
+}

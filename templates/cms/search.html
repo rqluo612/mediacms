@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block topimports %}
+<link href="{% static "css/search.css" %}?v={{ VERSION }}" rel="preload" as="style">
+<link href="{% static "css/search.css" %}?v={{ VERSION }}" rel="stylesheet">
+{% endblock topimports %}
+
+{% block content %}
+{% if user %}<div id="page-search"></div>{% endif %}
+{% endblock %}
+
+{% block bottomimports %}
+    <script src="{% static "js/search.js" %}?v={{ VERSION }}"></script>
+{% endblock bottomimports %}

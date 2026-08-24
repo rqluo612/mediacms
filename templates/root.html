@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% block head %}
+
+        <title>{% block headtitle %}{{PORTAL_NAME}}{% endblock headtitle %}</title>
+
+        {% include "common/head-meta.html" %}
+
+        {% block headermeta %}
+
+        <meta property="og:title" content="{{PORTAL_NAME}}">
+        <meta property="og:type" content="website">
+
+        {%endblock headermeta %}
+
+        {% block externallinks %}{% endblock externallinks %}
+
+        {% include "common/head-links.html" %}
+
+        {% block topimports %}{%endblock topimports %}
+
+        {% block extra_head %}{% endblock extra_head %}
+
+        {% include "config/index.html" %}
+
+        {% if not USE_ROUNDED_CORNERS %}
+        <style>
+            .viewer-container .player-container, .item-thumb, a.item-thumb {
+                border-radius: revert !important;
+            }
+        </style>
+        {% endif %}
+
+    {% endblock head %}
+
+</head>
+
+<body>
+
+    {% block beforecontent %}{% endblock %}
+
+    <div class="page-main-wrap">
+        {% include "messages.html" %}
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block aftercontent %}{% endblock %}
+
+    {% block externalscripts %}{% endblock externalscripts %}
+
+    {% include "common/body-scripts.html" %}
+
+    {% block bottomimports %}{% endblock bottomimports %}
+
+</body>
+
+</html>

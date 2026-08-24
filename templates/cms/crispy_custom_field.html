@@ -1,0 +1,124 @@
+{% load crispy_forms_field %}
+
+
+<style>
+  /* Form group styling */
+  .form-group {
+    margin-bottom: 1rem;
+    padding: 1.25rem 1.25rem 0.75rem 1.25rem;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+  }
+
+  /* Control label container styling */
+  .control-label-container {
+    margin-bottom: 0.75rem;
+  }
+
+  /* Label styling */
+  .control-label {
+    display: flex;
+    align-items: baseline;
+    font-weight: bold;
+    font-size: 1rem;
+  }
+
+  /* Help text styling */
+  .help-text-inline {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-left: 5px;
+    font-weight: normal;
+  }
+
+  /* Full width fields */
+  .controls.full-width input,
+  .controls.full-width textarea,
+  .controls.full-width select {
+    width: 100%;
+  }
+
+  /* Error styling */
+  .invalid-feedback {
+    color: #dc3545;
+    display: block;
+    margin-top: 0.25rem;
+  }
+
+  /* Button styling */
+  button[type="submit"],
+  input[type="submit"] {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+  }
+
+  button[type="submit"]:hover,
+  input[type="submit"]:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+  }
+
+  /* Better input field styling */
+  .controls input:not([type="checkbox"]):not([type="radio"]),
+  .controls select,
+  .controls textarea {
+    background: white;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .controls input:not([type="checkbox"]):not([type="radio"]):focus,
+  .controls select:focus,
+  .controls textarea:focus {
+    outline: none;
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+  }
+
+
+</style>
+
+<div class="form-group{% if field.errors %} has-error{% endif %}">
+    {% if field.field.widget.input_type == 'checkbox' and field.field.choices|length <= 1 %}
+        <div class="controls">
+            <label for="{{ field.id_for_label }}" class="control-label" style="font-weight: normal;">
+                {% crispy_field field %}
+                <span style="margin-left: 5px;">{{ field.label }}</span>
+                {% if field.help_text %}
+                    <span class="help-text-inline">- {{ field.help_text|safe }}</span>
+                {% endif %}
+            </label>
+            {% if field.errors %}
+                <div class="error-container">
+                    {% for error in field.errors %}
+                        <p class="invalid-feedback">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    {% else %}
+        <div class="control-label-container">
+            {% if field.label %}
+                <label for="{{ field.id_for_label }}" class="control-label">
+                    {{ field.label }}
+                    {% if field.help_text %}
+                        <span class="help-text-inline">- {{ field.help_text|safe }}</span>
+                    {% endif %}
+                </label>
+            {% endif %}
+        </div>
+        <div class="controls {% if field.name == 'title' or field.name == 'new_tags' or field.name == 'description' %}full-width{% endif %}">
+            {% crispy_field field %}
+            {% if field.errors %}
+                <div class="error-container">
+                    {% for error in field.errors %}
+                        <p class="invalid-feedback">{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>

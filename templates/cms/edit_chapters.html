@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block headtitle %}Edit video chapters - {{PORTAL_NAME}}{% endblock headtitle %}
+
+{% block topimports %}
+<link href="{% static 'chapters_editor/chapters-editor.css' %}?v={{ VERSION }}" rel="preload" as="style">
+<link href="{% static 'chapters_editor/chapters-editor.css' %}?v={{ VERSION }}" rel="stylesheet">
+<script src="{% static 'chapters_editor/chapters-editor.js' %}?v={{ VERSION }}"></script>
+
+<script>
+    window.MEDIA_DATA = {
+		videoUrl: "{{ media_file_path }}",
+		posterUrl: "{{ media_object.poster_url }}",
+		mediaId: "{{ media_object.friendly_token }}",
+		redirectURL: "{{ media_object.get_absolute_url }}",
+		redirectUserMediaURL: "{{ media_object.user.get_absolute_url }}",
+		chapters: {{ chapters }},
+    };
+</script>
+{%endblock topimports %}
+
+{% block innercontent %}
+	<div class="user-action-form-wrap">
+		{% include "cms/media_nav.html" with active_tab="chapters" %}
+		<div class="user-action-form-inner" style="max-width: 1280px; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);">
+			<div id="chapters-editor-root"></div>
+		</div>
+	</div>
+{% endblock innercontent %}
