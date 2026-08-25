@@ -203,6 +203,8 @@ def _fill_with_fallback(personalized, request, excluded_ids, limit):
     seen = set(excluded_ids)
     for media in personalized:
         if media.id not in seen:
+            media.recommendation_algorithm_id = "CF"
+            media.recommendation_algorithm_version = _algorithm_version()
             result.append(media)
             seen.add(media.id)
 
@@ -211,6 +213,8 @@ def _fill_with_fallback(personalized, request, excluded_ids, limit):
         for media in fallback:
             if media.id in seen:
                 continue
+            media.recommendation_algorithm_id = "LEGACY"
+            media.recommendation_algorithm_version = ""
             result.append(media)
             seen.add(media.id)
             if len(result) >= limit:
@@ -221,9 +225,17 @@ def _fill_with_fallback(personalized, request, excluded_ids, limit):
 def get_recommended_media(request, limit=50):
     """Recommendation strategy entry point with safe fallback to legacy behavior."""
     if not getattr(settings, "ENABLE_COLLABORATIVE_FILTERING", False):
-        return show_recommended_media(request, limit=limit)
+        result = show_recommended_media(request, limit=limit)
+        for media in result:
+            media.recommendation_algorithm_id = "LEGACY"
+            media.recommendation_algorithm_version = ""
+        return result
     if not request.user.is_authenticated:
-        return show_recommended_media(request, limit=limit)
+        result = show_recommended_media(request, limit=limit)
+        for media in result:
+            media.recommendation_algorithm_id = "LEGACY"
+            media.recommendation_algorithm_version = ""
+        return result
 
     try:
         interactions, excluded_ids = get_user_interactions(request.user)
@@ -236,4 +248,8 @@ def get_recommended_media(request, limit=50):
             "Collaborative recommendation failed; using legacy fallback",
             extra={"algorithm": _algorithm_version()},
         )
-        return show_recommended_media(request, limit=limit)
+        result = show_recommended_media(request, limit=limit)
+        for media in result:
+            media.recommendation_algorithm_id = "LEGACY"
+            media.recommendation_algorithm_version = ""
+        return result

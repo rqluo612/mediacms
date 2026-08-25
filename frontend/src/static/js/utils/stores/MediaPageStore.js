@@ -313,6 +313,7 @@ class MediaPageStore extends EventEmitter {
       url,
       {
         type: 'like',
+        interaction_id: window.MediaCMSBehaviorContext?.interaction_id,
         // `headers` are custom headers to be sent
       },
       {
@@ -350,6 +351,7 @@ class MediaPageStore extends EventEmitter {
       url,
       {
         type: 'dislike',
+        interaction_id: window.MediaCMSBehaviorContext?.interaction_id,
       },
       {
         headers: {
@@ -742,7 +744,7 @@ class MediaPageStore extends EventEmitter {
 
         postRequest(
           this.commentsAPIUrl,
-          { text: action.commentText },
+          { text: action.commentText, interaction_id: window.MediaCMSBehaviorContext?.interaction_id },
           { headers: { 'X-CSRFToken': csrfToken() } },
           false,
           this.submitCommentResponse,
@@ -757,7 +759,10 @@ class MediaPageStore extends EventEmitter {
         MediaPageStoreData[this.id].while.deleteCommentId = action.commentId;
         deleteRequest(
           this.commentsAPIUrl + '/' + action.commentId,
-          { headers: { 'X-CSRFToken': csrfToken() } },
+          {
+            headers: { 'X-CSRFToken': csrfToken() },
+            data: { interaction_id: window.MediaCMSBehaviorContext?.interaction_id },
+          },
           false,
           this.removeCommentResponse,
           this.removeCommentFail
@@ -786,6 +791,7 @@ class MediaPageStore extends EventEmitter {
           {
             type: 'add',
             media_friendly_token: action.media_id,
+            interaction_id: window.MediaCMSBehaviorContext?.interaction_id,
           },
           {
             headers: {
@@ -803,6 +809,7 @@ class MediaPageStore extends EventEmitter {
           {
             type: 'remove',
             media_friendly_token: action.media_id,
+            interaction_id: window.MediaCMSBehaviorContext?.interaction_id,
           },
           {
             headers: {

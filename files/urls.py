@@ -6,6 +6,7 @@ from django.urls import path, re_path
 
 from . import management_views, tinymce_handlers, views
 from .feeds import IndexRSSFeed, SearchRSSFeed
+from actions.behavior_views import InteractionEnd, InteractionEvents, InteractionHeartbeat, InteractionList, ViewingSessionEnd, ViewingSessionList
 
 friendly_token = r"(?P<friendly_token>[\w\-_]*)"
 
@@ -53,6 +54,12 @@ urlpatterns = [
     re_path(r"^upload", views.upload_media, name="upload_media"),
     # API VIEWS
     re_path(r"^api/v1/media/user/bulk_actions$", views.MediaBulkUserActions.as_view()),
+    path("api/v1/behavior/sessions", ViewingSessionList.as_view()),
+    path("api/v1/behavior/sessions/<str:session_id>/end", ViewingSessionEnd.as_view()),
+    path("api/v1/behavior/interactions", InteractionList.as_view()),
+    path("api/v1/behavior/interactions/<str:interaction_id>/events", InteractionEvents.as_view()),
+    path("api/v1/behavior/interactions/<str:interaction_id>/heartbeat", InteractionHeartbeat.as_view()),
+    path("api/v1/behavior/interactions/<str:interaction_id>/end", InteractionEnd.as_view()),
     re_path(r"^api/v1/media/user/bulk_actions/$", views.MediaBulkUserActions.as_view()),
     re_path(r"^api/v1/media$", views.MediaList.as_view()),
     re_path(r"^api/v1/media/$", views.MediaList.as_view()),

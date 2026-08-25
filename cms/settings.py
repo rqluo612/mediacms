@@ -466,6 +466,10 @@ COLLABORATIVE_FILTERING_USER_CACHE_TIMEOUT = 15 * 60
 COLLABORATIVE_FILTERING_ALGORITHM_VERSION = "item_cf_v1"
 
 CELERY_BEAT_SCHEDULE = {
+    "close_idle_viewing_sessions": {
+        "task": "close_idle_viewing_sessions",
+        "schedule": crontab(minute="*"),
+    },
     # clear expired sessions, every sunday 1.01am. By default Django has 2week
     # expire date
     "clear_sessions": {
@@ -682,6 +686,13 @@ except ImportError:
 if GLOBAL_LOGIN_REQUIRED:
     auth_index = MIDDLEWARE.index("django.contrib.auth.middleware.AuthenticationMiddleware")
     MIDDLEWARE.insert(auth_index + 1, "django.contrib.auth.middleware.LoginRequiredMiddleware")
+
+# Optional, isolated database for local/CI test runs. This must follow
+# local_settings so a production-shaped checkout can still run tests safely.
+if os.environ.get("TESTING") and os.environ.get("USE_SQLITE_TEST_DB"):
+    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 
 if USERS_NEEDS_TO_BE_APPROVED:

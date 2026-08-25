@@ -759,8 +759,30 @@ def clear_sessions():
     return True
 
 
+@task(name="close_idle_viewing_sessions", queue="short_tasks")
+def close_idle_viewing_sessions():
+    """Close behavior sessions at their last activity after five idle minutes."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from actions.models import UserViewingSession, VideoInteractionLog
+
+    cutoff = timezone.now() - timedelta(seconds=300)
+    sessions = UserViewingSession.objects.filter(session_end__isnull=True, last_activity_at__lte=cutoff)
+    for session in sessions.iterator():
+        session.session_end = session.last_activity_at
+        session.end_reason = UserViewingSession.EndReason.IDLE_TIMEOUT
+        session.save(update_fields=["session_end", "end_reason", "updated_at"])
+        session.interactions.filter(play_end_time__isnull=True).update(
+            play_end_time=session.last_activity_at,
+            end_reason=VideoInteractionLog.EndReason.SESSION_TIMEOUT,
+        )
+    return True
+
+
 @task(name="save_user_action", queue="short_tasks")
-def save_user_action(user_or_session, friendly_token=None, action="watch", extra_info=None):
+def save_user_action(user_or_session, friendly_token=None, action="watch", extra_info=None, interaction_id=None):
     """Short task that saves a user action"""
 
     if action not in VALID_USER_ACTIONS:
@@ -858,6 +880,18 @@ def save_user_action(user_or_session, friendly_token=None, action="watch", extra
     elif action == "dislike":
         media.dislikes += 1
         Media.objects.filter(friendly_token=friendly_token).update(dislikes=media.dislikes)
+
+    if user and interaction_id and action in ("like", "dislike"):
+        from actions.behavior import record_business_event
+
+        record_business_event(
+            user,
+            interaction_id,
+            media,
+            action,
+            state_field="liked" if action == "like" else None,
+            state=True if action == "like" else None,
+        )
 
     return True
 

@@ -56,7 +56,11 @@ function ShareOptions() {
       } else if (k === 'email') {
         compList.push(
           <div key="share-email" className="sh-option share-email">
-            <a href={shareOptions[k].shareUrl} title="">
+            <a
+              href={shareOptions[k].shareUrl}
+              title=""
+              onClick={() => window.MediaCMSRecordBehavior && window.MediaCMSRecordBehavior('share', { channel: 'email' })}
+            >
               <span>
                 <i className="material-icons">email</i>
               </span>
@@ -150,6 +154,9 @@ export function MediaShareOptions(props) {
   }
 
   function onCompleteCopyMediaLink() {
+    if (window.MediaCMSRecordBehavior) {
+      window.MediaCMSRecordBehavior('share', { channel: 'copy_link' });
+    }
     // FIXME: Without delay throws conflict error [ Uncaught Error: Dispatch.dispatch(...): Cannot dispatch in the middle of a dispatch. ].
     setTimeout(function () {
       PageActions.addNotification('Link copied to clipboard', 'clipboardLinkCopy');

@@ -1,3 +1,5 @@
+import BehaviorTracker from './BehaviorTracker';
+
 /**
  * PlaybackEventHandler - Utility for handling video player playback events
  *
@@ -18,6 +20,7 @@ class PlaybackEventHandler {
         };
         this.eventHandlers = {};
         this.isActive = false;
+        this.behaviorTracker = null;
     }
 
     /**
@@ -132,6 +135,12 @@ class PlaybackEventHandler {
         };
 
         this.isActive = true;
+
+        if (!this.options.isEmbedPlayer && typeof window !== 'undefined') {
+            const videoId = window.MEDIA_DATA?.data?.friendly_token || new URLSearchParams(window.location.search).get('m');
+            this.behaviorTracker = new BehaviorTracker(player, videoId);
+            this.behaviorTracker.init();
+        }
     }
 
     /**
@@ -152,6 +161,10 @@ class PlaybackEventHandler {
 
         this.eventHandlers = {};
         this.isActive = false;
+        if (this.behaviorTracker) {
+            this.behaviorTracker.destroy();
+            this.behaviorTracker = null;
+        }
     }
 
     /**

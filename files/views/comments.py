@@ -14,6 +14,8 @@ from rest_framework.response import Response
 from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 
+from actions.behavior import record_business_event
+
 from cms.permissions import IsAuthorizedToAdd, IsAuthorizedToAddComment
 from users.models import User
 
@@ -127,6 +129,15 @@ class CommentDetail(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             if (comment.user == self.request.user) or comment.media.user == self.request.user or is_mediacms_editor(self.request.user):
+                record_business_event(
+                    request.user,
+                    request.data.get("interaction_id"),
+                    comment.media,
+                    "comment_delete",
+                    {"comment_uid": str(comment.uid)},
+                    "commented",
+                    False,
+                )
                 comment.delete()
             else:
                 return Response({"detail": "bad permissions"}, status=status.HTTP_400_BAD_REQUEST)
@@ -152,7 +163,16 @@ class CommentDetail(APIView):
 
         serializer = CommentSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
-            serializer.save(user=request.user, media=media)
+            comment = serializer.save(user=request.user, media=media)
+            record_business_event(
+                request.user,
+                request.data.get("interaction_id"),
+                media,
+                "comment",
+                {"comment_uid": str(comment.uid)},
+                "commented",
+                True,
+            )
             if request.user != media.user:
                 notify_user_on_comment(friendly_token=media.friendly_token)
             # here forward the comment to check if a user was mentioned

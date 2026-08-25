@@ -15,6 +15,10 @@ class MediaSerializer(serializers.ModelSerializer):
     thumbnail_url = serializers.SerializerMethodField()
     author_profile = serializers.SerializerMethodField()
     author_thumbnail = serializers.SerializerMethodField()
+    behavior_context = serializers.SerializerMethodField()
+
+    def get_behavior_context(self, obj):
+        return getattr(obj, "behavior_context", None)
 
     def get_url(self, obj):
         return self.context["request"].build_absolute_uri(obj.get_absolute_url())
@@ -49,6 +53,7 @@ class MediaSerializer(serializers.ModelSerializer):
             "dislikes",
             "reported_times",
             "size",
+            "behavior_context",
             "is_reviewed",
             "featured",
         )
@@ -78,6 +83,7 @@ class MediaSerializer(serializers.ModelSerializer):
             "featured",
             "user_featured",
             "size",
+            "behavior_context",
             # "category",
         )
 

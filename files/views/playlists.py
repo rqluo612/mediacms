@@ -14,6 +14,8 @@ from rest_framework.response import Response
 from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 
+from actions.behavior import record_business_event
+
 from cms.permissions import IsAuthorizedToAdd, IsUserOrEditor
 
 from ..methods import is_mediacms_editor
@@ -171,12 +173,30 @@ class PlaylistDetail(APIView):
                             ordering=media_in_playlist + 1,
                         )
                         obj.save()
+                        record_business_event(
+                            request.user,
+                            request.data.get("interaction_id"),
+                            media,
+                            "collect",
+                            {"playlist_friendly_token": playlist.friendly_token},
+                            "collected",
+                            True,
+                        )
                         return Response(
                             {"detail": "media added to Playlist"},
                             status=status.HTTP_201_CREATED,
                         )
                 elif action == "remove":
                     PlaylistMedia.objects.filter(playlist=playlist, media=media).delete()
+                    record_business_event(
+                        request.user,
+                        request.data.get("interaction_id"),
+                        media,
+                        "uncollect",
+                        {"playlist_friendly_token": playlist.friendly_token},
+                        "collected",
+                        False,
+                    )
                     return Response(
                         {"detail": "media removed from Playlist"},
                         status=status.HTTP_201_CREATED,

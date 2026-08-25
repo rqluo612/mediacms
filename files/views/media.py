@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -22,6 +23,8 @@ from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 
 from actions.models import MediaAction
+from actions.behavior import BehaviorError, owned_session, touch
+from actions.models import VideoInteractionLog
 from cms.custom_pagination import FastPaginationWithoutCount
 from cms.permissions import IsAuthorizedToAdd, IsUserOrEditor
 from users.models import User
@@ -271,6 +274,40 @@ class MediaList(APIView):
         paginator = pagination_class()
 
         page = paginator.paginate_queryset(media, request)
+
+        behavior_session_id = request.query_params.get("behavior_session_id")
+        if show_param == "recommended" and behavior_session_id and request.user.is_authenticated:
+            try:
+                behavior_session = owned_session(request.user, behavior_session_id)
+                recommendation_request_id = uuid.uuid4()
+                interactions = []
+                for rank, media_obj in enumerate(page, start=1):
+                    interaction = VideoInteractionLog(
+                        session=behavior_session,
+                        user=request.user,
+                        participant_code=behavior_session.participant_code,
+                        media=media_obj,
+                        video_id=media_obj.friendly_token,
+                        video_uid=media_obj.uid,
+                        video_duration=media_obj.duration or None,
+                        recommendation_request_id=recommendation_request_id,
+                        algorithm_id=getattr(media_obj, "recommendation_algorithm_id", "LEGACY"),
+                        algorithm_version=getattr(media_obj, "recommendation_algorithm_version", ""),
+                        recommendation_rank=rank,
+                    )
+                    interactions.append(interaction)
+                VideoInteractionLog.objects.bulk_create(interactions)
+                for media_obj, interaction in zip(page, interactions):
+                    media_obj.behavior_context = {
+                        "interaction_id": interaction.interaction_id,
+                        "recommendation_request_id": str(recommendation_request_id),
+                        "algorithm_id": interaction.algorithm_id,
+                        "algorithm_version": interaction.algorithm_version,
+                        "recommendation_rank": interaction.recommendation_rank,
+                    }
+                touch(behavior_session)
+            except BehaviorError as exc:
+                return Response({"code": exc.code, "detail": exc.detail}, status=exc.status_code)
 
         prefetch_related_objects(page, 'tags')
 
@@ -1075,6 +1112,7 @@ class MediaActions(APIView):
                 friendly_token=media.friendly_token,
                 action=action,
                 extra_info=extra,
+                interaction_id=request.data.get("interaction_id"),
             )
 
             return Response({"detail": "action received"}, status=status.HTTP_201_CREATED)
