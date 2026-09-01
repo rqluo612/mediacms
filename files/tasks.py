@@ -766,18 +766,18 @@ def close_idle_viewing_sessions():
 
     from django.utils import timezone
 
-    from actions.models import UserViewingSession, VideoInteractionLog
+    from actions.behavior import close_session_logs
+    from actions.models import UserBehaviorLog
 
     cutoff = timezone.now() - timedelta(seconds=300)
-    sessions = UserViewingSession.objects.filter(session_end__isnull=True, last_activity_at__lte=cutoff)
-    for session in sessions.iterator():
-        session.session_end = session.last_activity_at
-        session.end_reason = UserViewingSession.EndReason.IDLE_TIMEOUT
-        session.save(update_fields=["session_end", "end_reason", "updated_at"])
-        session.interactions.filter(play_end_time__isnull=True).update(
-            play_end_time=session.last_activity_at,
-            end_reason=VideoInteractionLog.EndReason.SESSION_TIMEOUT,
-        )
+    session_ids = UserBehaviorLog.objects.filter(
+        session_end__isnull=True, last_activity_at__lte=cutoff
+    ).values_list("session_id", flat=True).distinct()
+    for session_id in session_ids.iterator():
+        logs = UserBehaviorLog.objects.filter(session_id=session_id, session_end__isnull=True)
+        latest = logs.order_by("-last_activity_at").first()
+        if latest:
+            close_session_logs(logs, latest.last_activity_at, UserBehaviorLog.EndReason.SESSION_TIMEOUT)
     return True
 
 
