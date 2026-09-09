@@ -131,7 +131,9 @@ class BehaviorTracker {
             if (this.firstPlay && !this.player.paused() && (this.player.currentTime() || 0) > 0) markPlaying();
         };
         this.handlers.pause = () => { this.updateWatchClock(); this.event('pause', { position: this.player.currentTime() || 0 }); this.heartbeat(); };
-        this.handlers.ended = () => this.end('ended');
+        // EndScreenHandler decides whether a completed playback becomes an
+        // automatic "next" transition or a terminal "ended" interaction.
+        this.handlers.ended = () => {};
         this.handlers.seeked = () => this.event('seek', { to_position: this.player.currentTime() || 0 });
         this.handlers.visibilitychange = () => { this.updateWatchClock(); this.heartbeat(); };
         this.handlers.pagehide = () => this.end('page_close', true);
@@ -179,7 +181,13 @@ class BehaviorTracker {
             const interaction = await this.request('/api/v1/behavior/interactions', 'POST', {
                 session_id: this.sessionId,
                 video_id: this.videoId,
-                entry_context: window.MEDIA_DATA?.data?.behavior_context?.algorithm_id || 'DIRECT',
+                entry_context:
+                    window.MEDIA_DATA?.data?.behavior_context?.algorithm_id ||
+                    (window.MEDIA_DATA?.isPlayList ? 'PLAYLIST' : 'DIRECT'),
+                recommendation_context:
+                    new URLSearchParams(window.location.search).get('rc') ||
+                    window.MEDIA_DATA?.data?.behavior_context?.attribution_token ||
+                    null,
             });
             this.interactionId = interaction.interaction_id;
             if (this.destroyed && !this.ended) this.end('navigate', true);

@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
 from files.models import Media
+from files.recommendation_attribution import create_recommendation_attribution, remember_recommendation_attribution
 from files.serializers import MediaSerializer
 from users.models import User
 
@@ -78,6 +79,95 @@ class BehaviorLoggingApiTest(TestCase):
     def test_anonymous_user_is_rejected(self):
         response = Client().post("/api/v1/behavior/sessions", {"client_session_id": str(uuid.uuid4())}, content_type="application/json")
         self.assertEqual(response.status_code, 403)
+
+    def test_signed_recommendation_context_is_saved_with_version_and_rank(self):
+        session_id = self.create_session()
+        context = {
+            "recommendation_request_id": str(uuid.uuid4()),
+            "algorithm_id": "CF",
+            "algorithm_version": "item_cf_v2",
+            "recommendation_rank": 3,
+        }
+        token = create_recommendation_attribution(self.user, self.media, context)
+        response = self.client.post(
+            "/api/v1/behavior/interactions",
+            {
+                "session_id": session_id,
+                "video_id": self.media.friendly_token,
+                "entry_context": "DIRECT",
+                "recommendation_context": token,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        log = UserBehaviorLog.objects.get(interaction_id=response.json()["interaction_id"])
+        self.assertEqual(log.algorithm_id, "CF")
+        self.assertEqual(log.algorithm_version, "item_cf_v2")
+        self.assertEqual(str(log.recommendation_request_id), context["recommendation_request_id"])
+        self.assertEqual(log.recommendation_rank, 3)
+
+    def test_tampered_recommendation_context_falls_back_to_direct(self):
+        session_id = self.create_session()
+        response = self.client.post(
+            "/api/v1/behavior/interactions",
+            {
+                "session_id": session_id,
+                "video_id": self.media.friendly_token,
+                "entry_context": "DIRECT",
+                "recommendation_context": "tampered-token",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        log = UserBehaviorLog.objects.get(interaction_id=response.json()["interaction_id"])
+        self.assertEqual(log.algorithm_id, "DIRECT")
+        self.assertEqual(log.algorithm_version, "")
+        self.assertIsNone(log.recommendation_request_id)
+
+    def test_recent_server_side_recommendation_is_used_when_client_drops_context(self):
+        context = {
+            "recommendation_request_id": str(uuid.uuid4()),
+            "algorithm_id": "LEGACY",
+            "algorithm_version": "legacy_v1",
+            "recommendation_rank": 2,
+        }
+        token = create_recommendation_attribution(self.user, self.media, context)
+        remember_recommendation_attribution(self.user, self.media.friendly_token, token)
+        response = self.client.post(
+            "/api/v1/behavior/interactions",
+            {"session_id": self.create_session(), "video_id": self.media.friendly_token, "entry_context": "DIRECT"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        log = UserBehaviorLog.objects.get(interaction_id=response.json()["interaction_id"])
+        self.assertEqual(log.algorithm_id, "LEGACY")
+        self.assertEqual(log.algorithm_version, "legacy_v1")
+        self.assertEqual(log.recommendation_rank, 2)
+
+    def test_playlist_context_is_not_overridden_by_remembered_recommendation(self):
+        context = {
+            "recommendation_request_id": str(uuid.uuid4()),
+            "algorithm_id": "CF",
+            "algorithm_version": "item_cf_v1",
+            "recommendation_rank": 1,
+        }
+        token = create_recommendation_attribution(self.user, self.media, context)
+        remember_recommendation_attribution(self.user, self.media.friendly_token, token)
+        response = self.client.post(
+            "/api/v1/behavior/interactions",
+            {
+                "session_id": self.create_session(),
+                "video_id": self.media.friendly_token,
+                "entry_context": "PLAYLIST",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        log = UserBehaviorLog.objects.get(interaction_id=response.json()["interaction_id"])
+        self.assertEqual(log.algorithm_id, "PLAYLIST")
+        self.assertEqual(log.algorithm_version, "")
+        self.assertIsNone(log.recommendation_request_id)
 
     def test_media_serializer_includes_optional_behavior_context(self):
         request = APIRequestFactory().get("/api/v1/media", HTTP_HOST="localhost")

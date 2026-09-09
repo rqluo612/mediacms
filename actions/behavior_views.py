@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from files.models import Media
+from files.recommendation_attribution import get_remembered_recommendation_attribution, read_recommendation_attribution
 
 from .behavior import CLIENT_EVENT_TYPES, IDLE_TIMEOUT_SECONDS, BehaviorError, close_session_logs, expire_session, merge_totals, owned_interaction, recalculate, session_queryset, touch_session
 from .models import UserBehaviorLog
@@ -26,7 +27,10 @@ def log_data(obj):
         "session_id": obj.session_id,
         "user_id": obj.user_id,
         "video_id": obj.video_id,
+        "recommendation_request_id": obj.recommendation_request_id,
         "algorithm_id": obj.algorithm_id,
+        "algorithm_version": obj.algorithm_version,
+        "recommendation_rank": obj.recommendation_rank,
         "play_start_time": obj.play_start_time,
         "play_end_time": obj.play_end_time,
         "video_duration": number(obj.video_duration),
@@ -96,6 +100,12 @@ class InteractionList(BehaviorAPIView):
             context = str(request.data.get("entry_context", "DIRECT")).upper()
             if context not in UserBehaviorLog.Algorithm.values:
                 raise BehaviorError("INVALID_FIELD", "Invalid entry_context.")
+            attribution_token = request.data.get("recommendation_context")
+            if not attribution_token and context != UserBehaviorLog.Algorithm.PLAYLIST:
+                attribution_token = get_remembered_recommendation_attribution(request.user, media.friendly_token)
+            attribution = read_recommendation_attribution(attribution_token, request.user, media.friendly_token)
+            if attribution:
+                context = attribution["algorithm_id"]
             now = timezone.now()
             log = UserBehaviorLog.objects.create(
                 auth_user=request.user,
@@ -106,6 +116,9 @@ class InteractionList(BehaviorAPIView):
                 video_id=media.friendly_token,
                 video_duration=media.duration or None,
                 algorithm_id=context,
+                algorithm_version=attribution.get("algorithm_version", "") if attribution else "",
+                recommendation_request_id=attribution.get("recommendation_request_id") if attribution else None,
+                recommendation_rank=attribution.get("recommendation_rank") if attribution else None,
                 exposure_time=now,
                 last_activity_at=now,
             )

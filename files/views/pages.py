@@ -37,6 +37,7 @@ from ..methods import (
     is_mediacms_editor,
 )
 from ..models import Category, Media, Page, Playlist, Subtitle, Tag, VideoTrimRequest
+from ..recommendation_attribution import get_remembered_recommendation_attribution
 from ..tasks import save_user_action, video_trim_task
 
 
@@ -746,6 +747,13 @@ def view_media(request):
     if not media:
         context["media"] = None
         return render(request, "cms/media.html", context)
+
+    if request.user.is_authenticated and not request.GET.get("rc"):
+        attribution_token = get_remembered_recommendation_attribution(request.user, friendly_token)
+        if attribution_token:
+            query = request.GET.copy()
+            query["rc"] = attribution_token
+            return HttpResponseRedirect(f"{request.path}?{query.urlencode()}")
 
     if media.state == "private":
         user = request.user

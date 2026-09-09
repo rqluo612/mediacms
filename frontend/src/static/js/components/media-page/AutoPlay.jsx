@@ -6,7 +6,10 @@ import { translateString } from '../../utils/helpers/';
 
 function autoPlayMedia() {
   const dt = MediaPageStore.get('media-data');
-  return dt && dt.related_media && dt.related_media.length ? dt.related_media[0] : null;
+  if (!dt) {
+    return null;
+  }
+  return dt.autoplay_next || (dt.related_media && dt.related_media.length ? dt.related_media[0] : null);
 }
 
 export function AutoPlay(props) {

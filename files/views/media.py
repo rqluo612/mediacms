@@ -49,6 +49,7 @@ from ..models import (
 )
 from ..serializers import MediaSearchSerializer, MediaSerializer, SingleMediaSerializer
 from ..services.recommendations import get_recommended_media
+from ..recommendation_attribution import create_recommendation_attribution, remember_recommendation_attribution
 from ..stop_words import STOP_WORDS
 from ..tasks import save_user_action
 
@@ -282,6 +283,14 @@ class MediaList(APIView):
                     "algorithm_version": getattr(media_obj, "recommendation_algorithm_version", ""),
                     "recommendation_rank": rank,
                 }
+                media_obj.behavior_context["attribution_token"] = create_recommendation_attribution(
+                    request.user, media_obj, media_obj.behavior_context
+                )
+                remember_recommendation_attribution(
+                    request.user,
+                    media_obj.friendly_token,
+                    media_obj.behavior_context["attribution_token"],
+                )
 
         prefetch_related_objects(page, 'tags')
 
@@ -303,6 +312,10 @@ class MediaList(APIView):
 
         response = paginator.get_paginated_response(serializer.data)
         response.data['tags'] = tags
+
+        if show_param == "recommended":
+            response["Cache-Control"] = "no-store, private"
+            response["Pragma"] = "no-cache"
 
         if include_sharing_info:
             shared_users = {}
@@ -884,6 +897,33 @@ class MediaDetail(APIView):
         related_media = related_media_serializer.data
         ret = serializer.data
 
+        # Keep playlist playback deterministic in the frontend, but give normal
+        # authenticated playback a separately attributed recommendation for
+        # its automatic "up next" transition.
+        autoplay_next = None
+        if request.user.is_authenticated:
+            recommendation_request_id = uuid.uuid4()
+            candidates = get_recommended_media(request, limit=50)
+            for rank, candidate in enumerate(candidates, start=1):
+                if candidate.pk == media.pk:
+                    continue
+                candidate.behavior_context = {
+                    "recommendation_request_id": str(recommendation_request_id),
+                    "algorithm_id": getattr(candidate, "recommendation_algorithm_id", "LEGACY"),
+                    "algorithm_version": getattr(candidate, "recommendation_algorithm_version", ""),
+                    "recommendation_rank": rank,
+                }
+                candidate.behavior_context["attribution_token"] = create_recommendation_attribution(
+                    request.user, candidate, candidate.behavior_context
+                )
+                remember_recommendation_attribution(
+                    request.user,
+                    candidate.friendly_token,
+                    candidate.behavior_context["attribution_token"],
+                )
+                autoplay_next = MediaSerializer(candidate, context={"request": request}).data
+                break
+
         # update rattings info with user specific ratings
         # eg user has already rated for this media
         # this only affects user rating and only if enabled
@@ -891,6 +931,7 @@ class MediaDetail(APIView):
             ret["ratings_info"] = update_user_ratings(request.user, media, ret.get("ratings_info"))
 
         ret["related_media"] = related_media
+        ret["autoplay_next"] = autoplay_next
         return Response(ret)
 
     @swagger_auto_schema(

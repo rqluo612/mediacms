@@ -162,9 +162,13 @@ export default class VideoViewer extends React.PureComponent {
     componentDidMount() {
         if (this.videoSources.length) {
 
+            const autoplayMedia =
+                this.props.data.autoplay_next ||
+                (this.props.data.related_media.length ? this.props.data.related_media[0] : null);
+
             this.upNextLoaderView =
-                !this.props.inEmbed && this.props.data.related_media.length
-                    ? new UpNextLoaderView(this.props.data.related_media[0])
+                !this.props.inEmbed && autoplayMedia
+                    ? new UpNextLoaderView(autoplayMedia)
                     : null;
 
             let topLeftHtml = null;
@@ -262,7 +266,7 @@ export default class VideoViewer extends React.PureComponent {
         }
     }
 
-    onClickNext() {
+    async onClickNext() {
         const playlistId = MediaPageStore.get('playlist-id');
 
         let nextLink;
@@ -274,10 +278,34 @@ export default class VideoViewer extends React.PureComponent {
                 nextLink = this.props.data.related_media[0].url;
             }
         } else if (!this.props.inEmbed) {
-            nextLink = this.props.data.related_media[0].url;
+            try {
+                const response = await fetch('/api/v1/media?show=recommended', {
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+                if (response.ok) {
+                    const payload = await response.json();
+                    const results = Array.isArray(payload.results) ? payload.results : [];
+                    const recommendation = results.find(
+                        item => item.friendly_token !== this.props.data.friendly_token
+                    );
+                    nextLink = recommendation ? recommendation.url : null;
+                }
+            } catch (error) {
+                nextLink = null;
+            }
+
+            if (!nextLink) {
+                const autoplayMedia =
+                    this.props.data.autoplay_next ||
+                    (this.props.data.related_media.length ? this.props.data.related_media[0] : null);
+                nextLink = autoplayMedia ? autoplayMedia.url : null;
+            }
         }
 
-        window.location.href = nextLink;
+        if (nextLink) {
+            window.location.href = nextLink;
+        }
     }
 
     onClickPrevious() {
@@ -355,10 +383,10 @@ export default class VideoViewer extends React.PureComponent {
             nextLink = MediaPageStore.get('playlist-next-media-url');
             previousLink = MediaPageStore.get('playlist-previous-media-url');
         } else {
-            nextLink =
-                this.props.data.related_media.length && !this.props.inEmbed
-                    ? this.props.data.related_media[0].url
-                    : null;
+            const autoplayMedia =
+                this.props.data.autoplay_next ||
+                (this.props.data.related_media.length ? this.props.data.related_media[0] : null);
+            nextLink = autoplayMedia && !this.props.inEmbed ? autoplayMedia.url : null;
         }
 
         const previewSprite = !!this.props.data.sprites_url

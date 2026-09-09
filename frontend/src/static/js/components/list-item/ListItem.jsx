@@ -54,15 +54,20 @@ function itemPageLink(props, item) {
 
   const playlistId = extractPlaylistId();
 
+  let url = item.url;
+
   if (props.inPlaylistView && playlistId) {
-    return item.url + '&pl=' + playlistId;
+    url += '&pl=' + playlistId;
+  } else if (void 0 !== props.playlistId && null !== props.playlistId) {
+    url += '&pl=' + props.playlistId;
   }
 
-  if (void 0 !== props.playlistId && null !== props.playlistId) {
-    return item.url + '&pl=' + props.playlistId;
+  const attributionToken = item.behavior_context?.attribution_token;
+  if (attributionToken && !new URL(url, window.location.origin).searchParams.has('rc')) {
+    url += (url.indexOf('?') === -1 ? '?' : '&') + 'rc=' + encodeURIComponent(attributionToken);
   }
 
-  return item.url;
+  return url;
 }
 
 export function listItemProps(props, item, index) {

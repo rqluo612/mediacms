@@ -21,7 +21,13 @@ class MediaSerializer(serializers.ModelSerializer):
         return getattr(obj, "behavior_context", None)
 
     def get_url(self, obj):
-        return self.context["request"].build_absolute_uri(obj.get_absolute_url())
+        url = self.context["request"].build_absolute_uri(obj.get_absolute_url())
+        behavior_context = getattr(obj, "behavior_context", None)
+        attribution_token = behavior_context.get("attribution_token") if behavior_context else None
+        if attribution_token:
+            separator = "&" if "?" in url else "?"
+            return f"{url}{separator}rc={attribution_token}"
+        return url
 
     def get_api_url(self, obj):
         return self.context["request"].build_absolute_uri(obj.get_absolute_url(api=True))

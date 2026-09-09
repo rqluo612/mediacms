@@ -85,6 +85,7 @@ export class EndScreenHandler {
 
         // If showRelated is false, we don't show the end screen or autoplay countdown
         if (showRelated === false) {
+            this.endBehaviorInteraction('ended');
             // But we still want to keep the control bar visible and hide the poster
             setTimeout(() => {
                 if (this.player && !this.player.isDisposed()) {
@@ -169,13 +170,22 @@ export class EndScreenHandler {
             // If it's a playlist, skip countdown and play directly
             if (currentVideo.isPlayList) {
                 this.cleanupOverlays();
+                this.endBehaviorInteraction('next');
                 goToNextVideo();
             } else {
                 this.showAutoplayCountdown(relatedVideos, goToNextVideo);
             }
         } else {
             // Autoplay disabled or no next video - show regular end screen
+            this.endBehaviorInteraction('ended');
             this.showEndScreen(relatedVideos);
+        }
+    }
+
+    endBehaviorInteraction(reason) {
+        const tracker = this.player && this.player._mediaCMSBehaviorTracker;
+        if (tracker && typeof tracker.end === 'function') {
+            tracker.end(reason, true);
         }
     }
 
@@ -209,9 +219,11 @@ export class EndScreenHandler {
             onPlayNext: () => {
                 // Reset control bar when auto-playing next video
                 this.resetControlBarBehavior();
+                this.endBehaviorInteraction('next');
                 goToNextVideo();
             },
             onCancel: () => {
+                this.endBehaviorInteraction('ended');
                 // Hide countdown and show end screen instead
                 if (this.autoplayCountdown) {
                     this.player.removeChild(this.autoplayCountdown);

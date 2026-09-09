@@ -750,6 +750,10 @@ function VideoJSPlayer({ videoId = 'default-video', showTitle = true, showRelate
 
     // Function to navigate to next video
     const goToNextVideo = () => {
+        const tracker = playerRef.current?._mediaCMSBehaviorTracker;
+        if (tracker && typeof tracker.end === 'function') {
+            tracker.end('next', true);
+        }
         if (mediaData.onClickNextCallback && typeof mediaData.onClickNextCallback === 'function') {
             mediaData.onClickNextCallback();
         }

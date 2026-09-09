@@ -98,6 +98,30 @@ class MediaRecommendationApiTest(TestCase):
         self.assertNotIn("Media B", titles)
         self.assertNotIn("Private candidate", titles)
         self.assertEqual(len(titles), len(set(titles)))
+        context = response.json()["results"][0]["behavior_context"]
+        self.assertEqual(context["algorithm_id"], "CF")
+        self.assertEqual(context["algorithm_version"], "item_cf_test")
+        self.assertEqual(context["recommendation_rank"], 1)
+        self.assertTrue(context["recommendation_request_id"])
+        self.assertTrue(context["attribution_token"])
+        self.assertIn("&rc=", response.json()["results"][0]["url"])
+        self.assertIn(context["attribution_token"], response.json()["results"][0]["url"])
+        self.assertEqual(response["Cache-Control"], "no-store, private")
+        self.assertEqual(response["Pragma"], "no-cache")
+
+    def test_media_detail_exposes_signed_cf_autoplay_next(self):
+        response = self._login().get(f"/api/v1/media/{self.media_a.friendly_token}")
+
+        self.assertEqual(response.status_code, 200)
+        autoplay_next = response.json()["autoplay_next"]
+        self.assertEqual(autoplay_next["title"], "Media C")
+        self.assertEqual(autoplay_next["behavior_context"]["algorithm_id"], "CF")
+        self.assertEqual(
+            autoplay_next["behavior_context"]["algorithm_version"], "item_cf_test"
+        )
+        self.assertTrue(autoplay_next["behavior_context"]["recommendation_request_id"])
+        self.assertTrue(autoplay_next["behavior_context"]["attribution_token"])
+        self.assertIn("&rc=", autoplay_next["url"])
 
     def test_anonymous_user_uses_legacy_fallback(self):
         with patch("files.services.recommendations.get_collaborative_recommendations") as collaborative:

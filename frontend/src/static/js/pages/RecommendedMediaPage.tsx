@@ -20,7 +20,7 @@ export const RecommendedMediaPage: React.FC<RecommendedMediaPageProps> = ({
       {(apiUrl) => (
         <MediaListWrapper title={title} className="items-list-ver">
           <LazyLoadItemListAsync
-            requestUrl={apiUrl.recommended}
+            requestUrl={`${apiUrl.recommended}&v=${encodeURIComponent(PageStore.get('config-site').version)}`}
             hideViews={!PageStore.get('config-media-item').displayViews}
             hideAuthor={!PageStore.get('config-media-item').displayAuthor}
             hideDate={!PageStore.get('config-media-item').displayPublishDate}
