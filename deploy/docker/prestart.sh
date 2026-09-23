@@ -27,12 +27,17 @@ if [ X"$ENABLE_MIGRATIONS" = X"yes" ]; then
 
     python manage.py collectstatic --noinput
 
+    if [ X"$REBUILD_RECOMMENDATIONS_ON_STARTUP" = X"yes" ]; then
+        echo "Rebuilding recommendation caches"
+        python manage.py rebuild_recommendation_cache
+    fi
+
     # echo "Updating hostname ..."
     # TODO: Get the FRONTEND_HOST from cms/local_settings.py
     # echo "from django.contrib.sites.models import Site; Site.objects.update(name='$FRONTEND_HOST', domain='$FRONTEND_HOST')" | python manage.py shell
 fi
 
-# Setting up internal nginx server
+# Setting up internal nginx serve
 # HTTPS setup is delegated to a reverse proxy running infront of the application
 
 cp deploy/docker/nginx_http_only.conf /etc/nginx/sites-available/default

@@ -105,9 +105,32 @@ def build_and_cache_item_similarities():
     similarities = calculate_item_similarities(matrix)
     timeout = getattr(settings, "COLLABORATIVE_FILTERING_CACHE_TIMEOUT", 60 * 60 * 12)
     cache.set(_similarities_cache_key(), similarities, timeout)
+
+    # A rebuilt similarity model makes every per-user ranking stale. Remove
+    # those derived rankings immediately so the next request uses this model
+    # instead of serving the previous result for up to 15 minutes.
+    user_cache_pattern = f"recommendations:{_algorithm_version()}:user:*"
+    delete_pattern = getattr(cache, "delete_pattern", None)
+    if callable(delete_pattern):
+        deleted_user_caches = delete_pattern(user_cache_pattern)
+    else:
+        # Non-Redis cache backends used in development/tests may not support
+        # pattern deletion. Their entries have a short timeout and cannot be
+        # enumerated portably.
+        deleted_user_caches = 0
+        logger.warning(
+            "Cache backend does not support user recommendation pattern invalidation",
+            extra={"pattern": user_cache_pattern},
+        )
+
     logger.info(
         "Collaborative-filtering similarities cached",
-        extra={"users": len(matrix), "items": len(similarities), "algorithm": _algorithm_version()},
+        extra={
+            "users": len(matrix),
+            "items": len(similarities),
+            "algorithm": _algorithm_version(),
+            "deleted_user_caches": deleted_user_caches,
+        },
     )
     return similarities
 
@@ -201,24 +224,57 @@ def get_collaborative_recommendations(
 def _fill_with_fallback(personalized, request, excluded_ids, limit):
     result = []
     seen = set(excluded_ids)
-    for media in personalized:
-        if media.id not in seen:
-            media.recommendation_algorithm_id = "CF"
-            media.recommendation_algorithm_version = _algorithm_version()
-            result.append(media)
-            seen.add(media.id)
 
-    if len(result) < limit:
-        fallback = show_recommended_media(request, limit=max(100, limit * 3))
-        for media in fallback:
-            if media.id in seen:
+    def append_media(candidates, algorithm_id, algorithm_version="", blocked=None):
+        blocked = seen if blocked is None else blocked
+        for media in candidates:
+            if media.id in blocked:
                 continue
-            media.recommendation_algorithm_id = "LEGACY"
-            media.recommendation_algorithm_version = ""
+            media.recommendation_algorithm_id = algorithm_id
+            media.recommendation_algorithm_version = algorithm_version
             result.append(media)
             seen.add(media.id)
+            blocked.add(media.id)
             if len(result) >= limit:
                 break
+
+    append_media(personalized, "CF", _algorithm_version())
+
+    # Prefer unseen items from the existing popularity strategy.
+    if len(result) < limit:
+        append_media(
+            show_recommended_media(request, limit=max(100, limit * 3)),
+            "LEGACY",
+        )
+
+    # A populated popularity cache can contain only items the user has already
+    # consumed. Fill from every listable item before allowing repeats.
+    if len(result) < limit:
+        unseen = (
+            Media.objects.filter(listable=True)
+            .exclude(id__in=seen)
+            .order_by("-views", "-likes", "-add_date")
+            .prefetch_related("user", "tags")
+        )
+        append_media(unseen, "LEGACY")
+
+    # If the catalogue is exhausted, repeats are preferable to an empty page.
+    # Explicit dislikes remain excluded even in this final fallback.
+    if len(result) < limit:
+        disliked_ids = set(
+            MediaAction.objects.filter(user=request.user, action="dislike").values_list(
+                "media_id", flat=True
+            )
+        )
+        blocked = disliked_ids.union(media.id for media in result)
+        repeats = (
+            Media.objects.filter(listable=True)
+            .exclude(id__in=blocked)
+            .order_by("-views", "-likes", "-add_date")
+            .prefetch_related("user", "tags")
+        )
+        append_media(repeats, "LEGACY", blocked=blocked)
+
     return result
 
 

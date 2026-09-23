@@ -21,6 +21,7 @@ services:
       ENABLE_CELERY_SHORT: 'no'
       ENABLE_CELERY_LONG: 'no'
       ENABLE_CELERY_BEAT: 'no'
+      REBUILD_RECOMMENDATIONS_ON_STARTUP: 'yes'
       ADMIN_USER: 'admin'
       ADMIN_EMAIL: 'admin@localhost'
       ADMIN_PASSWORD: 'admin'
@@ -72,6 +73,9 @@ services:
       retries: 5
   redis:
     image: "redis:alpine"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - mediacms_redis_data:/data
     restart: always
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -97,3 +101,5 @@ services:
 volumes:
   mediacms_postgres_data:
     name: mediacms_postgres_data
+  mediacms_redis_data:
+    name: mediacms_redis_data
