@@ -336,6 +336,7 @@ class MediaList(APIView):
             openapi.Parameter(name="media_file", in_=openapi.IN_FORM, type=openapi.TYPE_FILE, required=True, description="media_file"),
             openapi.Parameter(name="description", in_=openapi.IN_FORM, type=openapi.TYPE_STRING, required=False, description="description"),
             openapi.Parameter(name="title", in_=openapi.IN_FORM, type=openapi.TYPE_STRING, required=False, description="title"),
+            openapi.Parameter(name="tags", in_=openapi.IN_FORM, type=openapi.TYPE_STRING, required=False, description='For videos: JSON array of 1–5 distinct content tags, each at most 20 characters; recommended 2–3'),
         ],
         tags=['Media'],
         operation_summary='Add new Media',
@@ -345,10 +346,25 @@ class MediaList(APIView):
     def post(self, request, format=None):
         # Add new media
 
-        serializer = MediaSerializer(data=request.data, context={"request": request})
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
+        from uploader.metadata import validate_metadata, resolve_tags
+
+        media_file = request.data.get("media_file")
+        if not media_file:
+            return Response({"media_file": ["请选择上传文件。"]}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            metadata = validate_metadata(request.data, media_file.name)
+        except ValidationError as exc:
+            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+        data = request.data.copy()
+        data["title"] = metadata["title"]
+        data["description"] = metadata["description"]
+        serializer = MediaSerializer(data=data, context={"request": request})
         if serializer.is_valid():
-            media_file = request.data["media_file"]
-            serializer.save(user=request.user, media_file=media_file)
+            with transaction.atomic():
+                media = serializer.save(user=request.user, media_file=media_file)
+                media.tags.set(resolve_tags(metadata["tags"]))
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

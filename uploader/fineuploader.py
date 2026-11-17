@@ -1,8 +1,7 @@
 import os
 import re
-import shutil
 import uuid
-from io import StringIO
+from io import BytesIO
 from os.path import join
 
 from django.conf import settings
@@ -101,17 +100,23 @@ class ChunkedFineUploader(BaseFineUploader):
 
     def combine_chunks(self):
         # implement the same behaviour.
-        self.real_path = self.storage.save(self._full_file_path, StringIO())
+        self.real_path = self.storage.save(self._full_file_path, BytesIO())
 
         with self.storage.open(self.real_path, "wb") as final_file:
             for i in range(self.total_parts):
                 part = join(self.chunks_path, str(i))
                 with self.storage.open(part, "rb") as source:
                     final_file.write(source.read())
-        shutil.rmtree(self._abs_chunks_path)
 
     def _save_chunk(self):
-        return self.storage.save(self.chunk_file, self.file)
+        # An acknowledged chunk can be resent after a lost response. Replace it
+        # at the same path rather than letting Storage.save choose a new name.
+        if not self.storage.exists(self.chunk_file):
+            return self.storage.save(self.chunk_file, self.file)
+        with self.storage.open(self.chunk_file, "wb") as target:
+            for chunk in self.file.chunks():
+                target.write(chunk)
+        return self.chunk_file
 
     def save(self):
         if self.chunked:

@@ -7,6 +7,9 @@ from django.core.exceptions import PermissionDenied
 from django.core.files import File
 from django.http import JsonResponse
 from django.views import generic
+from django.db import transaction
+from django.contrib.auth import get_user_model
+from .metadata import upload_token, resolve_tags
 
 from files.helpers import rm_file
 from files.methods import user_allowed_to_upload
@@ -48,7 +51,14 @@ class FineUploaderView(generic.FormView):
             raise PermissionDenied  # HTTP 403
         return super(FineUploaderView, self).dispatch(request, *args, **kwargs)
 
+    @transaction.atomic
     def form_valid(self, form):
+        # Lock before touching chunks: duplicate completion requests may run concurrently.
+        get_user_model().objects.select_for_update().get(pk=self.request.user.pk)
+        token = upload_token(self.request.user.pk, form.cleaned_data["qquuid"])
+        existing = Media.objects.filter(friendly_token=token, user=self.request.user).first()
+        if existing:
+            return self.make_response({"success": True, "media_url": existing.get_absolute_url()})
         self.upload = ChunkedFineUploader(form.cleaned_data, self.concurrent)
         if self.upload.concurrent and self.chunks_done:
             try:
@@ -60,17 +70,25 @@ class FineUploaderView(generic.FormView):
             self.upload.save()
         else:
             self.upload.save()
-            return self.make_response({"success": True})
+            if not self.upload.finished:
+                return self.make_response({"success": True})
 
         media_file = os.path.join(settings.MEDIA_ROOT, self.upload.real_path)
         with open(media_file, "rb") as f:
             myfile = File(f)
-            new = Media.objects.create(media_file=myfile, user=self.request.user, title=self.upload.original_filename)
+            new = Media.objects.create(
+                media_file=myfile, user=self.request.user, friendly_token=token,
+                title=form.cleaned_data["title"], description=form.cleaned_data["description"],
+            )
+            new.tags.set(resolve_tags(form.cleaned_data["tags"]))
 
-        rm_file(media_file)
-        shutil.rmtree(os.path.join(settings.MEDIA_ROOT, self.upload.file_path))
+        def cleanup():
+            shutil.rmtree(self.upload._abs_chunks_path, ignore_errors=True)
+            rm_file(media_file)
+            shutil.rmtree(os.path.join(settings.MEDIA_ROOT, self.upload.file_path), ignore_errors=True)
+        transaction.on_commit(cleanup)
         return self.make_response({"success": True, "media_url": new.get_absolute_url()})
 
     def form_invalid(self, form):
-        data = {"success": False, "error": "%s" % repr(form.errors)}
+        data = {"success": False, "error": "；".join(" ".join(errors) for errors in form.errors.values()), "fields": form.errors.get_json_data()}
         return self.make_response(data, status=400)
