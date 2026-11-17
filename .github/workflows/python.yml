@@ -12,6 +12,12 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v1
 
+    - name: Prepare disposable test environment
+      run: |
+        umask 077
+        printf 'SECRET_KEY=%s\nPOSTGRES_DB=mediacms\nPOSTGRES_USER=mediacms\n' "$(openssl rand -hex 32)" > .env
+        : > frontend/.env
+
     - name: Build the Stack
       run:  docker compose -f docker-compose-dev.yaml build
 
