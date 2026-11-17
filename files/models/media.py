@@ -564,12 +564,14 @@ class Media(models.Model):
                     profiles.remove(profile)
                     encoding = Encoding(media=self, profile=profile)
                     encoding.save()
-                    transaction.on_commit(partial(
-                        tasks.encode_media.apply_async,
-                        args=[self.friendly_token, profile.id, encoding.id],
-                        kwargs={"force": force},
-                        priority=0,
-                    ))
+                    transaction.on_commit(
+                        partial(
+                            tasks.encode_media.apply_async,
+                            args=[self.friendly_token, profile.id, encoding.id],
+                            kwargs={"force": force},
+                            priority=0,
+                        )
+                    )
             profiles = [p.id for p in profiles]
             transaction.on_commit(partial(tasks.chunkize_media.delay, self.friendly_token, profiles, force=force))
         else:
@@ -584,12 +586,14 @@ class Media(models.Model):
                     priority = 9
                 else:
                     priority = 0
-                transaction.on_commit(partial(
-                    tasks.encode_media.apply_async,
-                    args=[self.friendly_token, profile.id, encoding.id],
-                    kwargs={"force": force},
-                    priority=priority,
-                ))
+                transaction.on_commit(
+                    partial(
+                        tasks.encode_media.apply_async,
+                        args=[self.friendly_token, profile.id, encoding.id],
+                        kwargs={"force": force},
+                        priority=priority,
+                    )
+                )
 
         return True
 

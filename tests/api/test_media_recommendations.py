@@ -14,7 +14,6 @@ from files.services.recommendations import (
 )
 from files.tests import create_account
 
-
 CF_SETTINGS = {
     "ENABLE_COLLABORATIVE_FILTERING": True,
     "COLLABORATIVE_FILTERING_MIN_INTERACTIONS": 2,
@@ -91,16 +90,22 @@ class MediaRecommendationApiTest(TestCase):
     def test_personalized_results_prefer_unseen_when_supply_is_sufficient(self):
         # The API requests 50 items. Provide enough unseen items for that entire
         # ranking, not merely enough for the first pagination page.
-        Media.objects.bulk_create([
-            Media(
-                title=f"Unseen candidate {index}", user=self.peer_one,
-                friendly_token=f"CF_UNSEEN_{index}",
-                media_file=self.media_c.media_file.name,
-                media_type=self.media_c.media_type, state="public",
-                encoding_status="success", is_reviewed=True, listable=True,
-            )
-            for index in range(50)
-        ])
+        Media.objects.bulk_create(
+            [
+                Media(
+                    title=f"Unseen candidate {index}",
+                    user=self.peer_one,
+                    friendly_token=f"CF_UNSEEN_{index}",
+                    media_file=self.media_c.media_file.name,
+                    media_type=self.media_c.media_type,
+                    state="public",
+                    encoding_status="success",
+                    is_reviewed=True,
+                    listable=True,
+                )
+                for index in range(50)
+            ]
+        )
         response = self._login().get("/api/v1/media?show=recommended")
 
         self.assertEqual(response.status_code, 200)
@@ -139,8 +144,8 @@ class MediaRecommendationApiTest(TestCase):
         seen_ids = {self.media_a.pk, self.media_b.pk}
 
         # Exhaust both unseen candidates before filling with consumed items.
-        self.assertEqual(set(ids[:len(unseen_ids)]), unseen_ids)
-        self.assertEqual(set(ids[len(unseen_ids):]), seen_ids)
+        self.assertEqual(set(ids[: len(unseen_ids)]), unseen_ids)
+        self.assertEqual(set(ids[len(unseen_ids) :]), seen_ids)
         self.assertEqual(len(ids), 4)
         self.assertEqual(len(ids), len(set(ids)))
         self.assertNotIn(disliked.pk, ids)
@@ -159,9 +164,7 @@ class MediaRecommendationApiTest(TestCase):
         autoplay_next = response.json()["autoplay_next"]
         self.assertEqual(autoplay_next["title"], "Media C")
         self.assertEqual(autoplay_next["behavior_context"]["algorithm_id"], "CF")
-        self.assertEqual(
-            autoplay_next["behavior_context"]["algorithm_version"], "item_cf_test"
-        )
+        self.assertEqual(autoplay_next["behavior_context"]["algorithm_version"], "item_cf_test")
         self.assertTrue(autoplay_next["behavior_context"]["recommendation_request_id"])
         self.assertTrue(autoplay_next["behavior_context"]["attribution_token"])
         self.assertIn("&rc=", autoplay_next["url"])

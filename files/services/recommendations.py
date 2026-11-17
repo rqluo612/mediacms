@@ -42,11 +42,7 @@ def build_interaction_matrix():
     seen_actions = set()
 
     enabled_actions = [action for action in ("watch", "like") if action in weights]
-    actions = (
-        MediaAction.objects.filter(user_id__isnull=False, action__in=enabled_actions)
-        .values_list("user_id", "media_id", "action")
-        .iterator()
-    )
+    actions = MediaAction.objects.filter(user_id__isnull=False, action__in=enabled_actions).values_list("user_id", "media_id", "action").iterator()
     for user_id, media_id, action in actions:
         key = (user_id, media_id, action)
         if key not in seen_actions:
@@ -67,9 +63,7 @@ def build_interaction_matrix():
 
 def calculate_item_similarities(interaction_matrix, max_similar_items=None):
     """Calculate sparse item cosine similarities from a user-item matrix."""
-    max_similar_items = max_similar_items or getattr(
-        settings, "COLLABORATIVE_FILTERING_MAX_SIMILAR_ITEMS", 100
-    )
+    max_similar_items = max_similar_items or getattr(settings, "COLLABORATIVE_FILTERING_MAX_SIMILAR_ITEMS", 100)
     norms = defaultdict(float)
     dot_products = defaultdict(float)
 
@@ -93,9 +87,7 @@ def calculate_item_similarities(interaction_matrix, max_similar_items=None):
 
     result = {}
     for media_id, related in similarities.items():
-        result[media_id] = sorted(related, key=lambda item: (-item[1], item[0]))[
-            :max_similar_items
-        ]
+        result[media_id] = sorted(related, key=lambda item: (-item[1], item[0]))[:max_similar_items]
     return result
 
 
@@ -150,9 +142,7 @@ def get_user_interactions(user):
             excluded.add(media_id)
 
     if "playlist" in weights:
-        playlist_media_ids = PlaylistMedia.objects.filter(
-            playlist__user=user
-        ).values_list("media_id", flat=True).distinct()
+        playlist_media_ids = PlaylistMedia.objects.filter(playlist__user=user).values_list("media_id", flat=True).distinct()
         for media_id in playlist_media_ids:
             scores[media_id] += weights["playlist"]
             excluded.add(media_id)
@@ -171,9 +161,7 @@ def score_candidates(interactions, similarities):
 
 def _rank_candidates(candidate_scores, excluded_ids, limit):
     candidate_ids = set(candidate_scores).difference(excluded_ids)
-    media = Media.objects.filter(id__in=candidate_ids, listable=True).prefetch_related(
-        "user", "tags"
-    )
+    media = Media.objects.filter(id__in=candidate_ids, listable=True).prefetch_related("user", "tags")
     media_by_id = {item.id: item for item in media}
     ranked_ids = sorted(
         media_by_id,
@@ -187,24 +175,15 @@ def _rank_candidates(candidate_scores, excluded_ids, limit):
     return [media_by_id[media_id] for media_id in ranked_ids[:limit]]
 
 
-def get_collaborative_recommendations(
-    user, limit=50, interactions=None, excluded_ids=None
-):
+def get_collaborative_recommendations(user, limit=50, interactions=None, excluded_ids=None):
     """Return personalized public media, or an empty list when data is insufficient."""
     if interactions is None or excluded_ids is None:
         interactions, excluded_ids = get_user_interactions(user)
 
     cached_ids = cache.get(_user_cache_key(user.id))
     if cached_ids is not None:
-        media_by_id = {
-            item.id: item
-            for item in Media.objects.filter(id__in=cached_ids, listable=True).prefetch_related(
-                "user", "tags"
-            )
-        }
-        return [media_by_id[media_id] for media_id in cached_ids if media_id in media_by_id][
-            :limit
-        ]
+        media_by_id = {item.id: item for item in Media.objects.filter(id__in=cached_ids, listable=True).prefetch_related("user", "tags")}
+        return [media_by_id[media_id] for media_id in cached_ids if media_id in media_by_id][:limit]
 
     minimum = getattr(settings, "COLLABORATIVE_FILTERING_MIN_INTERACTIONS", 3)
     if len(interactions) < minimum:
@@ -250,29 +229,15 @@ def _fill_with_fallback(personalized, request, excluded_ids, limit):
     # A populated popularity cache can contain only items the user has already
     # consumed. Fill from every listable item before allowing repeats.
     if len(result) < limit:
-        unseen = (
-            Media.objects.filter(listable=True)
-            .exclude(id__in=seen)
-            .order_by("-views", "-likes", "-add_date")
-            .prefetch_related("user", "tags")
-        )
+        unseen = Media.objects.filter(listable=True).exclude(id__in=seen).order_by("-views", "-likes", "-add_date").prefetch_related("user", "tags")
         append_media(unseen, "LEGACY")
 
     # If the catalogue is exhausted, repeats are preferable to an empty page.
     # Explicit dislikes remain excluded even in this final fallback.
     if len(result) < limit:
-        disliked_ids = set(
-            MediaAction.objects.filter(user=request.user, action="dislike").values_list(
-                "media_id", flat=True
-            )
-        )
+        disliked_ids = set(MediaAction.objects.filter(user=request.user, action="dislike").values_list("media_id", flat=True))
         blocked = disliked_ids.union(media.id for media in result)
-        repeats = (
-            Media.objects.filter(listable=True)
-            .exclude(id__in=blocked)
-            .order_by("-views", "-likes", "-add_date")
-            .prefetch_related("user", "tags")
-        )
+        repeats = Media.objects.filter(listable=True).exclude(id__in=blocked).order_by("-views", "-likes", "-add_date").prefetch_related("user", "tags")
         append_media(repeats, "LEGACY", blocked=blocked)
 
     return result
@@ -295,9 +260,7 @@ def _get_original_recommendations(request, limit=50, enabled=None):
 
     try:
         interactions, excluded_ids = get_user_interactions(request.user)
-        personalized = get_collaborative_recommendations(
-            request.user, limit=limit, interactions=interactions, excluded_ids=excluded_ids
-        )
+        personalized = get_collaborative_recommendations(request.user, limit=limit, interactions=interactions, excluded_ids=excluded_ids)
         return _fill_with_fallback(personalized, request, excluded_ids, limit)
     except Exception:
         logger.exception(
@@ -314,11 +277,13 @@ def _get_original_recommendations(request, limit=50, enabled=None):
 def get_recommended_media(request, limit=50, current_media_id=None):
     """Single strategy dispatcher; original CF/legacy logic remains isolated."""
     from ..recommendation_config import resolve_strategy
+
     strategy = resolve_strategy(
         getattr(settings, "RECOMMENDATION_STRATEGY", ""),
         getattr(settings, "ENABLE_COLLABORATIVE_FILTERING", False),
     )
     if strategy == "content":
         from .content_recommendations import get_content_recommendations
+
         return get_content_recommendations(request.user, limit, current_media_id)
     return _get_original_recommendations(request, limit, enabled=strategy == "cf")

@@ -3,13 +3,12 @@ import os
 import shutil
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.files import File
+from django.db import transaction
 from django.http import JsonResponse
 from django.views import generic
-from django.db import transaction
-from django.contrib.auth import get_user_model
-from .metadata import upload_token, resolve_tags
 
 from files.helpers import rm_file
 from files.methods import user_allowed_to_upload
@@ -17,6 +16,7 @@ from files.models import Media
 
 from .fineuploader import ChunkedFineUploader
 from .forms import FineUploaderUploadForm, FineUploaderUploadSuccessForm
+from .metadata import resolve_tags, upload_token
 
 
 class FineUploaderView(generic.FormView):
@@ -77,8 +77,11 @@ class FineUploaderView(generic.FormView):
         with open(media_file, "rb") as f:
             myfile = File(f)
             new = Media.objects.create(
-                media_file=myfile, user=self.request.user, friendly_token=token,
-                title=form.cleaned_data["title"], description=form.cleaned_data["description"],
+                media_file=myfile,
+                user=self.request.user,
+                friendly_token=token,
+                title=form.cleaned_data["title"],
+                description=form.cleaned_data["description"],
             )
             new.tags.set(resolve_tags(form.cleaned_data["tags"]))
 
@@ -86,6 +89,7 @@ class FineUploaderView(generic.FormView):
             shutil.rmtree(self.upload._abs_chunks_path, ignore_errors=True)
             rm_file(media_file)
             shutil.rmtree(os.path.join(settings.MEDIA_ROOT, self.upload.file_path), ignore_errors=True)
+
         transaction.on_commit(cleanup)
         return self.make_response({"success": True, "media_url": new.get_absolute_url()})
 

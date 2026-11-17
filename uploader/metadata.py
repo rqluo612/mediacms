@@ -1,4 +1,5 @@
 """Validation shared by the upload form and direct media API."""
+
 import json
 import os
 import uuid
@@ -62,6 +63,7 @@ def validate_metadata(data, filename):
 def resolve_tags(titles):
     # Serialize creation across uploaders, including differently cased legacy tags.
     from django.db import connection
+
     from files.models import Tag
 
     if connection.vendor == 'postgresql':

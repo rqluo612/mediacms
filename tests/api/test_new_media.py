@@ -26,14 +26,15 @@ class TestX(TestCase):
         # because celery is started with setting task_always_eager
         # practically this means that this testing will take some time, but
         # ensures that video transcoding completes well
-        with open('fixtures/small_video.mp4', 'rb') as fp:
-            client.post('/api/v1/media', {'title': 'small video file test', 'media_file': fp})
+        with self.captureOnCommitCallbacks(execute=True):
+            with open('fixtures/small_video.mp4', 'rb') as fp:
+                client.post('/api/v1/media', {'title': 'small video file test', 'tags': '["test"]', 'media_file': fp})
 
-        with open('fixtures/test_image.png', 'rb') as fp:
-            client.post('/api/v1/media', {'title': 'image file test', 'media_file': fp})
+            with open('fixtures/test_image.png', 'rb') as fp:
+                client.post('/api/v1/media', {'title': 'image file test', 'media_file': fp})
 
-        with open('fixtures/medium_video.mp4', 'rb') as fp:
-            client.post('/fu/upload/', {'qqfile': fp, 'qqfilename': 'medium_video.mp4', 'qquuid': str(uuid.uuid4())})
+            with open('fixtures/medium_video.mp4', 'rb') as fp:
+                client.post('/fu/upload/', {'qqfile': fp, 'qqfilename': 'medium_video.mp4', 'qquuid': str(uuid.uuid4()), 'tags': '["test"]'})
 
         self.assertEqual(Media.objects.all().count(), 3, "Problem with file upload")
         # by default the portal_workflow is public, so anything uploaded gets public
@@ -42,7 +43,7 @@ class TestX(TestCase):
         self.assertEqual(Media.objects.filter(media_type='video').count(), 2, "Media identification failed")
         self.assertEqual(Media.objects.filter(media_type='image').count(), 1, "Media identification failed")
         self.assertEqual(Media.objects.filter(user=self.user).count(), 3, "User assignment failed")
-        medium_video = Media.objects.get(title="medium_video.mp4")
+        medium_video = Media.objects.get(title="medium_video")
         self.assertEqual(len(medium_video.hls_info), 13, "Problem with HLS info")
 
         # using the provided EncodeProfiles, these two files should produce 9 Encoding objects.

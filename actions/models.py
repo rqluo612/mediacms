@@ -129,6 +129,9 @@ class UserBehaviorLog(models.Model):
         ]
         constraints = [
             models.CheckConstraint(condition=models.Q(completion_ratio__gte=0) & models.Q(completion_ratio__lte=1), name="user_behavior_completion_0_1"),
-            models.CheckConstraint(condition=models.Q(play_end_time__isnull=True) | models.Q(play_start_time__isnull=True) | models.Q(play_end_time__gte=models.F("play_start_time")), name="user_behavior_play_end_after_start"),
+            models.CheckConstraint(
+                condition=models.Q(play_end_time__isnull=True) | models.Q(play_start_time__isnull=True) | models.Q(play_end_time__gte=models.F("play_start_time")),
+                name="user_behavior_play_end_after_start",
+            ),
             models.CheckConstraint(condition=models.Q(session_end__isnull=True) | models.Q(session_end__gte=models.F("session_start")), name="user_behavior_session_end_after_start"),
         ]

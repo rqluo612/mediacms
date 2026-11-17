@@ -1,5 +1,7 @@
 """Recommendation configuration validation (no model imports)."""
+
 import math
+
 from django.core.exceptions import ImproperlyConfigured
 
 

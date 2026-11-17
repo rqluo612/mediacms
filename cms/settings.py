@@ -3,6 +3,8 @@ import os
 from celery.schedules import crontab
 from django.utils.translation import gettext_lazy as _
 
+from files.recommendation_config import content_parameters, resolve_strategy
+
 DEBUG = False
 
 # PORTAL NAME, this is the portal title and
@@ -724,6 +726,6 @@ if USE_LTI:
     SHOW_LMS_COURSES_IN_CATEGORIES = False
 
 # Validate after all local/development overrides have loaded.
-from files.recommendation_config import resolve_strategy, content_parameters
+
 resolve_strategy(RECOMMENDATION_STRATEGY, ENABLE_COLLABORATIVE_FILTERING)
 content_parameters(CONTENT_RECOMMENDATION_ALPHA, CONTENT_RECOMMENDATION_WEIGHTS)

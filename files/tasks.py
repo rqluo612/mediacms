@@ -770,9 +770,7 @@ def close_idle_viewing_sessions():
     from actions.models import UserBehaviorLog
 
     cutoff = timezone.now() - timedelta(seconds=300)
-    session_ids = UserBehaviorLog.objects.filter(
-        session_end__isnull=True, last_activity_at__lte=cutoff
-    ).values_list("session_id", flat=True).distinct()
+    session_ids = UserBehaviorLog.objects.filter(session_end__isnull=True, last_activity_at__lte=cutoff).values_list("session_id", flat=True).distinct()
     for session_id in session_ids.iterator():
         logs = UserBehaviorLog.objects.filter(session_id=session_id, session_end__isnull=True)
         latest = logs.order_by("-last_activity_at").first()
