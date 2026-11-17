@@ -6,7 +6,6 @@ from django.utils import timezone
 
 from .models import UserBehaviorLog
 
-
 IDLE_TIMEOUT_SECONDS = 300
 CLIENT_EVENT_TYPES = {"exposure", "play", "resume", "pause", "seek", "replay", "end", "share"}
 EARLY_EXIT_REASONS = {

@@ -40,18 +40,14 @@ class PrivateMediaAccessTest(TestCase):
 
     def test_other_user_cannot_open_private_page(self):
         client = Client()
-        self.assertTrue(
-            client.login(username=self.other.username, password=self.password)
-        )
+        self.assertTrue(client.login(username=self.other.username, password=self.password))
 
         self.assertEqual(client.get(self.page_url).status_code, 403)
         self.assertEqual(client.get(self.api_url).status_code, 401)
 
     def test_owner_can_open_private_page_and_api(self):
         client = Client()
-        self.assertTrue(
-            client.login(username=self.owner.username, password=self.password)
-        )
+        self.assertTrue(client.login(username=self.owner.username, password=self.password))
 
         self.assertEqual(client.get(self.page_url).status_code, 200)
         self.assertEqual(client.get(self.api_url).status_code, 200)

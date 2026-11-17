@@ -757,9 +757,7 @@ def view_media(request):
 
     if media.state == "private":
         user = request.user
-        has_access = user.is_authenticated and (
-            user.has_member_access_to_media(media) or is_mediacms_editor(user)
-        )
+        has_access = user.is_authenticated and (user.has_member_access_to_media(media) or is_mediacms_editor(user))
         if not has_access:
             if user.is_anonymous:
                 return redirect_to_login(request.get_full_path())

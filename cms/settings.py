@@ -3,6 +3,8 @@ import os
 from celery.schedules import crontab
 from django.utils.translation import gettext_lazy as _
 
+from files.recommendation_config import content_parameters, resolve_strategy
+
 DEBUG = False
 
 # PORTAL NAME, this is the portal title and
@@ -453,6 +455,9 @@ CELERY_SOFT_TIME_LIMIT = 2 * 60 * 60
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERYD_PREFETCH_MULTIPLIER = 1
 
+RECOMMENDATION_STRATEGY = ""
+CONTENT_RECOMMENDATION_ALPHA = 0.5
+CONTENT_RECOMMENDATION_WEIGHTS = {"watch": 1.0, "like": 3.0, "playlist": 4.0}
 ENABLE_COLLABORATIVE_FILTERING = False
 COLLABORATIVE_FILTERING_MIN_INTERACTIONS = 3
 COLLABORATIVE_FILTERING_WEIGHTS = {
@@ -719,3 +724,8 @@ if USE_LTI:
     # Whether LMS course categories appear in the public
     # category list.
     SHOW_LMS_COURSES_IN_CATEGORIES = False
+
+# Validate after all local/development overrides have loaded.
+
+resolve_strategy(RECOMMENDATION_STRATEGY, ENABLE_COLLABORATIVE_FILTERING)
+content_parameters(CONTENT_RECOMMENDATION_ALPHA, CONTENT_RECOMMENDATION_WEIGHTS)

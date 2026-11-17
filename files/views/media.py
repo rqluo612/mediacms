@@ -1,4 +1,5 @@
 import uuid
+from copy import copy
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -47,9 +48,12 @@ from ..models import (
     PlaylistMedia,
     Tag,
 )
+from ..recommendation_attribution import (
+    create_recommendation_attribution,
+    remember_recommendation_attribution,
+)
 from ..serializers import MediaSearchSerializer, MediaSerializer, SingleMediaSerializer
 from ..services.recommendations import get_recommended_media
-from ..recommendation_attribution import create_recommendation_attribution, remember_recommendation_attribution
 from ..stop_words import STOP_WORDS
 from ..tasks import save_user_action
 
@@ -283,9 +287,7 @@ class MediaList(APIView):
                     "algorithm_version": getattr(media_obj, "recommendation_algorithm_version", ""),
                     "recommendation_rank": rank,
                 }
-                media_obj.behavior_context["attribution_token"] = create_recommendation_attribution(
-                    request.user, media_obj, media_obj.behavior_context
-                )
+                media_obj.behavior_context["attribution_token"] = create_recommendation_attribution(request.user, media_obj, media_obj.behavior_context)
                 remember_recommendation_attribution(
                     request.user,
                     media_obj.friendly_token,
@@ -336,6 +338,13 @@ class MediaList(APIView):
             openapi.Parameter(name="media_file", in_=openapi.IN_FORM, type=openapi.TYPE_FILE, required=True, description="media_file"),
             openapi.Parameter(name="description", in_=openapi.IN_FORM, type=openapi.TYPE_STRING, required=False, description="description"),
             openapi.Parameter(name="title", in_=openapi.IN_FORM, type=openapi.TYPE_STRING, required=False, description="title"),
+            openapi.Parameter(
+                name="tags",
+                in_=openapi.IN_FORM,
+                type=openapi.TYPE_STRING,
+                required=False,
+                description='For videos: JSON array of 1–5 distinct content tags, each at most 20 characters; recommended 2–3',
+            ),
         ],
         tags=['Media'],
         operation_summary='Add new Media',
@@ -345,10 +354,26 @@ class MediaList(APIView):
     def post(self, request, format=None):
         # Add new media
 
-        serializer = MediaSerializer(data=request.data, context={"request": request})
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
+
+        from uploader.metadata import resolve_tags, validate_metadata
+
+        media_file = request.data.get("media_file")
+        if not media_file:
+            return Response({"media_file": ["请选择上传文件。"]}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            metadata = validate_metadata(request.data, media_file.name)
+        except ValidationError as exc:
+            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+        data = copy(request.data)
+        data["title"] = metadata["title"]
+        data["description"] = metadata["description"]
+        serializer = MediaSerializer(data=data, context={"request": request})
         if serializer.is_valid():
-            media_file = request.data["media_file"]
-            serializer.save(user=request.user, media_file=media_file)
+            with transaction.atomic():
+                media = serializer.save(user=request.user, media_file=media_file)
+                media.tags.set(resolve_tags(metadata["tags"]))
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -858,9 +883,7 @@ class MediaDetail(APIView):
             self.check_object_permissions(self.request, media)
             if media.state == "private":
                 user = self.request.user
-                has_access = user.is_authenticated and (
-                    user.has_member_access_to_media(media) or is_mediacms_editor(user)
-                )
+                has_access = user.is_authenticated and (user.has_member_access_to_media(media) or is_mediacms_editor(user))
                 if not has_access:
                     return Response(
                         {"detail": "media is private"},
@@ -903,7 +926,7 @@ class MediaDetail(APIView):
         autoplay_next = None
         if request.user.is_authenticated:
             recommendation_request_id = uuid.uuid4()
-            candidates = get_recommended_media(request, limit=50)
+            candidates = get_recommended_media(request, limit=50, current_media_id=media.pk)
             for rank, candidate in enumerate(candidates, start=1):
                 if candidate.pk == media.pk:
                     continue
@@ -913,9 +936,7 @@ class MediaDetail(APIView):
                     "algorithm_version": getattr(candidate, "recommendation_algorithm_version", ""),
                     "recommendation_rank": rank,
                 }
-                candidate.behavior_context["attribution_token"] = create_recommendation_attribution(
-                    request.user, candidate, candidate.behavior_context
-                )
+                candidate.behavior_context["attribution_token"] = create_recommendation_attribution(request.user, candidate, candidate.behavior_context)
                 remember_recommendation_attribution(
                     request.user,
                     candidate.friendly_token,

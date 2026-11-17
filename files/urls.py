@@ -4,9 +4,17 @@ from django.conf.urls import include
 from django.conf.urls.static import static
 from django.urls import path, re_path
 
+from actions.behavior_views import (
+    InteractionEnd,
+    InteractionEvents,
+    InteractionHeartbeat,
+    InteractionList,
+    ViewingSessionEnd,
+    ViewingSessionList,
+)
+
 from . import management_views, tinymce_handlers, views
 from .feeds import IndexRSSFeed, SearchRSSFeed
-from actions.behavior_views import InteractionEnd, InteractionEvents, InteractionHeartbeat, InteractionList, ViewingSessionEnd, ViewingSessionList
 
 friendly_token = r"(?P<friendly_token>[\w\-_]*)"
 

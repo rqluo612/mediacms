@@ -14,7 +14,6 @@ from files.services.recommendations import (
 )
 from files.tests import create_account
 
-
 CF_SETTINGS = {
     "ENABLE_COLLABORATIVE_FILTERING": True,
     "COLLABORATIVE_FILTERING_MIN_INTERACTIONS": 2,
@@ -88,7 +87,25 @@ class MediaRecommendationApiTest(TestCase):
         self.assertTrue(client.login(username=(user or self.target).username, password=self.password))
         return client
 
-    def test_personalized_results_exclude_interacted_and_private_media(self):
+    def test_personalized_results_prefer_unseen_when_supply_is_sufficient(self):
+        # The API requests 50 items. Provide enough unseen items for that entire
+        # ranking, not merely enough for the first pagination page.
+        Media.objects.bulk_create(
+            [
+                Media(
+                    title=f"Unseen candidate {index}",
+                    user=self.peer_one,
+                    friendly_token=f"CF_UNSEEN_{index}",
+                    media_file=self.media_c.media_file.name,
+                    media_type=self.media_c.media_type,
+                    state="public",
+                    encoding_status="success",
+                    is_reviewed=True,
+                    listable=True,
+                )
+                for index in range(50)
+            ]
+        )
         response = self._login().get("/api/v1/media?show=recommended")
 
         self.assertEqual(response.status_code, 200)
@@ -109,6 +126,37 @@ class MediaRecommendationApiTest(TestCase):
         self.assertEqual(response["Cache-Control"], "no-store, private")
         self.assertEqual(response["Pragma"], "no-cache")
 
+    def test_exhausted_unseen_supply_allows_seen_but_keeps_safety_and_uniqueness(self):
+        disliked = self._create_media("Disliked candidate")
+        self._action(self.target, disliked, "dislike")
+        # Also positively interacted: dislike must still win when adding repeats.
+        self._action(self.target, disliked, "watch")
+        self._action(self.target, disliked, "like")
+        unlistable = self._create_media("Unlistable public candidate", listable=False)
+        self._action(self.target, unlistable, "watch")
+        self._action(self.target, self.private_media, "watch")
+
+        request = RequestFactory().get("/api/v1/media?show=recommended")
+        request.user = self.target
+        results = get_recommended_media(request, limit=50)
+        ids = [item.pk for item in results]
+        unseen_ids = {self.media_c.pk, self.media_d.pk}
+        seen_ids = {self.media_a.pk, self.media_b.pk}
+
+        # Exhaust both unseen candidates before filling with consumed items.
+        self.assertEqual(set(ids[: len(unseen_ids)]), unseen_ids)
+        self.assertEqual(set(ids[len(unseen_ids) :]), seen_ids)
+        self.assertEqual(len(ids), 4)
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertNotIn(disliked.pk, ids)
+        self.assertNotIn(self.private_media.pk, ids)
+        self.assertNotIn(unlistable.pk, ids)
+        self.assertTrue(all(item.listable for item in results))
+        for item in results:
+            if item.pk in seen_ids:
+                self.assertEqual(item.recommendation_algorithm_id, "LEGACY")
+                self.assertEqual(item.recommendation_algorithm_version, "")
+
     def test_media_detail_exposes_signed_cf_autoplay_next(self):
         response = self._login().get(f"/api/v1/media/{self.media_a.friendly_token}")
 
@@ -116,9 +164,7 @@ class MediaRecommendationApiTest(TestCase):
         autoplay_next = response.json()["autoplay_next"]
         self.assertEqual(autoplay_next["title"], "Media C")
         self.assertEqual(autoplay_next["behavior_context"]["algorithm_id"], "CF")
-        self.assertEqual(
-            autoplay_next["behavior_context"]["algorithm_version"], "item_cf_test"
-        )
+        self.assertEqual(autoplay_next["behavior_context"]["algorithm_version"], "item_cf_test")
         self.assertTrue(autoplay_next["behavior_context"]["recommendation_request_id"])
         self.assertTrue(autoplay_next["behavior_context"]["attribution_token"])
         self.assertIn("&rc=", autoplay_next["url"])

@@ -9,9 +9,23 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from files.models import Media
-from files.recommendation_attribution import get_remembered_recommendation_attribution, read_recommendation_attribution
+from files.recommendation_attribution import (
+    get_remembered_recommendation_attribution,
+    read_recommendation_attribution,
+)
 
-from .behavior import CLIENT_EVENT_TYPES, IDLE_TIMEOUT_SECONDS, BehaviorError, close_session_logs, expire_session, merge_totals, owned_interaction, recalculate, session_queryset, touch_session
+from .behavior import (
+    CLIENT_EVENT_TYPES,
+    IDLE_TIMEOUT_SECONDS,
+    BehaviorError,
+    close_session_logs,
+    expire_session,
+    merge_totals,
+    owned_interaction,
+    recalculate,
+    session_queryset,
+    touch_session,
+)
 from .models import UserBehaviorLog
 
 
@@ -22,6 +36,7 @@ def error_response(exc):
 def log_data(obj):
     def number(value):
         return float(value) if value is not None else None
+
     return {
         "interaction_id": obj.interaction_id,
         "session_id": obj.session_id,

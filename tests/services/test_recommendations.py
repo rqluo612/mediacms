@@ -15,9 +15,9 @@ class CollaborativeFilteringMathTest(SimpleTestCase):
         values_10 = dict(similarities[10])
         values_20 = dict(similarities[20])
 
-        self.assertAlmostEqual(values_10[20], 2 / (2 ** 0.5 * 3 ** 0.5))
+        self.assertAlmostEqual(values_10[20], 2 / (2**0.5 * 3**0.5))
         self.assertAlmostEqual(values_10[30], 1 / 2)
-        self.assertAlmostEqual(values_20[30], 2 / (3 ** 0.5 * 2 ** 0.5))
+        self.assertAlmostEqual(values_20[30], 2 / (3**0.5 * 2**0.5))
 
     def test_candidate_score_is_weighted_sum(self):
         interactions = {10: 1.0, 20: 3.0}

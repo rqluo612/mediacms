@@ -1,7 +1,6 @@
 from django.core import signing
 from django.core.cache import cache
 
-
 ATTRIBUTION_SALT = "mediacms.recommendation-attribution.v1"
 ATTRIBUTION_MAX_AGE_SECONDS = 60 * 60 * 24
 ATTRIBUTION_CACHE_SECONDS = 60 * 30

@@ -19,6 +19,12 @@
 <link href="{% static "css/add-media.css" %}" rel="preload" as="style">
 <link href="{% static "css/add-media.css" %}" rel="stylesheet">
 <style>
+    .upload-metadata { display: grid; gap: 8px; margin: 12px 0; }
+    .upload-metadata label { display: grid; gap: 4px; }
+    .upload-metadata input, .upload-metadata textarea { width: 100%; padding: 8px; color: inherit; background: inherit; border: 1px solid #888; border-radius: 4px; }
+    [hidden] { display: none !important; }
+    #apply-common-tags, #start-uploads { min-height: 40px; padding: 8px 18px; margin: 4px 8px 4px 0; border-radius: 4px; cursor: pointer; }
+    .metadata-error { color: #c62828; }
     /* LMS Embed Mode specific styling */
     body.lms-embed-mode {
         overflow-y: hidden;
@@ -152,6 +158,12 @@
                                             <span class="media-upload-item-filename qq-upload-file-selector"></span>
                                             <input class="media-upload-item-filename-input qq-edit-filename-selector" tab-index="0" type="text" />
                                         </div>
+                                        <div class="upload-metadata">
+                                            <label>标题（必填，最多100字）<input class="metadata-title" type="text" /></label>
+                                            <label>内容标签（至少1个、最多5个，建议填写2～3个；逗号分隔；可搜索或输入新标签）<input class="metadata-tags" type="text" list="upload-tag-options" /></label>
+                                            <label>简介（选填，最多300字）<textarea class="metadata-description" rows="2"></textarea></label>
+                                            <span class="metadata-error" role="alert"></span>
+                                        </div>
                                         <div class="media-upload-item-details-bottom">
                                             <div class="media-upload-item-progress-bar-container qq-progress-bar-container-selector">
                                                 <div role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" class="media-upload-item-progress-bar qq-progress-bar-selector"></div>
@@ -197,6 +209,13 @@
                     </div>
                 </div>
             </script>
+            <div class="upload-metadata">
+                <label>共同标签（逗号分隔，添加到尚未开始的文件）<input id="common-tags" list="upload-tag-options" /></label>
+                <button type="button" id="apply-common-tags">添加共同标签</button>
+                <button type="button" id="start-uploads">开始上传</button>
+                <span id="batch-metadata-error" role="alert" class="metadata-error"></span>
+            </div>
+            <datalist id="upload-tag-options"></datalist>
             <div class="media-uploader"></div>
             <div class="upload-processing-status" aria-live="polite"></div>
         </div>
@@ -216,6 +235,8 @@
 
 {% block bottomimports %}
 <script src="{% static "js/add-media.js" %}?v={{ VERSION }}"></script>
+{% upload_metadata_version as metadata_version %}
+<script src="{% static "js/upload-metadata.js" %}?v={{ metadata_version }}"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function(event) {
 
@@ -352,8 +373,25 @@
             processingPolls[token] = window.setTimeout(checkStatus, 1500);
         }
 
+        function prepareMetadata(uploader, id) {
+            if (!UploadMetadata.isVideo(uploader.getName(id))) return true;
+            var row = uploader.getItemByFileId(id);
+            var data = {
+                title: row.querySelector('.metadata-title').value.trim(),
+                tags: UploadMetadata.tags(row.querySelector('.metadata-tags').value),
+                description: row.querySelector('.metadata-description').value.trim()
+            };
+            var error = UploadMetadata.validate(data);
+            row.querySelector('.metadata-error').textContent = error;
+            if (error) return false;
+            row.querySelector('.metadata-tags').value = data.tags.join(', ');
+            uploader.setParams({title: data.title, tags: JSON.stringify(data.tags), description: data.description}, id);
+            return true;
+        }
+
         var default_concurrent_chunked_uploader = new qq.FineUploader({
             debug: false,
+            autoUpload: false,
             element: document.querySelector('.media-uploader'),
             request: {
                 endpoint: '{% url 'uploader:upload' %}',
@@ -380,7 +418,19 @@
                 },
             },
             callbacks: {
+                onSubmitted: function(id, name) {
+                    var row = this.getItemByFileId(id);
+                    row.querySelector('.upload-metadata').hidden = !UploadMetadata.isVideo(name);
+                    row.querySelector('.metadata-title').value = name.replace(/\.[^.]+$/, '');
+                },
+                onUpload: function(id) {
+                    this.getItemByFileId(id).querySelectorAll('.upload-metadata input, .upload-metadata textarea').forEach(function(input) { input.disabled = true; });
+                },
+                onManualRetry: function(id) {
+                    return prepareMetadata(this, id);
+                },
                 onError: function(id, name, errorReason, xhrOrXdr) {
+                    this.getItemByFileId(id).querySelectorAll('.upload-metadata input, .upload-metadata textarea').forEach(function(input) { input.disabled = false; });
                     console.warn(qq.format("Error on file number {} - {}.  Reason: {}", id, name, errorReason));
                     setProcessingStatus('failed-' + id, name, 'failed', errorReason || 'Upload failed. Please retry.');
                 },
@@ -421,17 +471,8 @@
                         }
 
                         var listEl = document.querySelector( '.qq-file-id-' + id );
+                        if (listEl) listEl.hidden = true;
                         var viewFileEl = listEl ? listEl.querySelector( '.view-uploaded-media-link' ) : null;
-
-                        if ( listEl ) {
-                            var fileUrl = response.media_url;
-                            listEl.style.cursor = 'pointer';
-                            listEl.addEventListener( 'click', function(ev) {
-                                ev.preventDefault();
-                                ev.stopPropagation();
-                                window.location.href = fileUrl;
-                            });
-                        }
 
                         if ( viewFileEl ) {
                             viewFileEl.setAttribute( 'href', response.media_url );
@@ -440,6 +481,45 @@
                     }
                 },
             },
+        });
+        var uploader = default_concurrent_chunked_uploader;
+        document.getElementById('start-uploads').onclick = function() {
+            var valid = true;
+            uploader.getUploads({status: qq.status.SUBMITTED}).forEach(function(file) {
+                if (!prepareMetadata(uploader, file.id)) valid = false;
+            });
+            if (valid) uploader.uploadStoredFiles();
+        };
+        document.getElementById('apply-common-tags').onclick = function() {
+            var common = document.getElementById('common-tags').value;
+            var changes = uploader.getUploads({status: qq.status.SUBMITTED}).filter(function(file) { return UploadMetadata.isVideo(file.name); }).map(function(file) {
+                var input = uploader.getItemByFileId(file.id).querySelector('.metadata-tags');
+                return {input: input, tags: UploadMetadata.tags(input.value + ',' + common)};
+            });
+            var invalid = changes.some(function(change) { return change.tags.length > 5 || change.tags.some(function(tag) { return Array.from(tag).length > 20; }); });
+            document.getElementById('batch-metadata-error').textContent = invalid ? '添加后标签超过5个或单个超过20字，请逐个调整。' : '';
+            if (!invalid) changes.forEach(function(change) { change.input.value = change.tags.join(', '); });
+        };
+        var searchTimer;
+        document.addEventListener('input', function(event) {
+            if (!event.target.matches('.metadata-tags, #common-tags')) return;
+            clearTimeout(searchTimer);
+            var parts = event.target.value.split(/[,，]/);
+            var query = parts.pop().trim();
+            var prefix = parts.length ? parts.join(', ') + ', ' : '';
+            searchTimer = setTimeout(function() {
+                fetch('/api/v1/tags?q=' + encodeURIComponent(query), {credentials: 'same-origin'})
+                    .then(function(response) { return response.json(); })
+                    .then(function(data) {
+                        var list = document.getElementById('upload-tag-options');
+                        list.replaceChildren();
+                        (data.results || []).forEach(function(tag) {
+                            var option = document.createElement('option');
+                            option.value = prefix + tag.title;
+                            list.appendChild(option);
+                        });
+                    }).catch(function() {});
+            }, 200);
         });
     });
 </script>

@@ -6,7 +6,10 @@ from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
 from files.models import Media
-from files.recommendation_attribution import create_recommendation_attribution, remember_recommendation_attribution
+from files.recommendation_attribution import (
+    create_recommendation_attribution,
+    remember_recommendation_attribution,
+)
 from files.serializers import MediaSerializer
 from users.models import User
 
@@ -37,12 +40,22 @@ class BehaviorLoggingApiTest(TestCase):
         interaction_id = self.create_log(self.create_session())
         for sequence, event_type in ((1, "exposure"), (2, "play"), (3, "share")):
             payload = {"channel": "copy_link"} if event_type == "share" else {"position": 0, "visible": True}
-            response = self.client.post(f"/api/v1/behavior/interactions/{interaction_id}/events", {"event_id": str(uuid.uuid4()), "client_sequence": sequence, "event_type": event_type, "payload": payload}, content_type="application/json")
+            response = self.client.post(
+                f"/api/v1/behavior/interactions/{interaction_id}/events",
+                {"event_id": str(uuid.uuid4()), "client_sequence": sequence, "event_type": event_type, "payload": payload},
+                content_type="application/json",
+            )
             self.assertEqual(response.status_code, 201)
         UserBehaviorLog.objects.filter(interaction_id=interaction_id).update(play_start_time=timezone.now() - timedelta(seconds=24), exposure_time=timezone.now() - timedelta(seconds=25))
-        heartbeat = self.client.patch(f"/api/v1/behavior/interactions/{interaction_id}/heartbeat", {"client_sequence": 4, "playing": True, "visible": True, "watch_duration": 23.4, "video_duration": 30}, content_type="application/json")
+        heartbeat = self.client.patch(
+            f"/api/v1/behavior/interactions/{interaction_id}/heartbeat",
+            {"client_sequence": 4, "playing": True, "visible": True, "watch_duration": 23.4, "video_duration": 30},
+            content_type="application/json",
+        )
         self.assertEqual(heartbeat.json()["completion_ratio"], 0.78)
-        ended = self.client.post(f"/api/v1/behavior/interactions/{interaction_id}/end", {"client_sequence": 5, "end_reason": "next", "watch_duration": 23.4, "video_duration": 30}, content_type="application/json")
+        ended = self.client.post(
+            f"/api/v1/behavior/interactions/{interaction_id}/end", {"client_sequence": 5, "end_reason": "next", "watch_duration": 23.4, "video_duration": 30}, content_type="application/json"
+        )
         self.assertEqual(ended.status_code, 200)
         self.assertGreater(ended.json()["skip_time"], 0)
         log = UserBehaviorLog.objects.get(interaction_id=interaction_id)

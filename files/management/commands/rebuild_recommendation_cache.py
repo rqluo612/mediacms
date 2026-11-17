@@ -10,9 +10,4 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         get_list_of_popular_media()
         similarities = build_and_cache_item_similarities()
-        self.stdout.write(
-            self.style.SUCCESS(
-                "Recommendation caches rebuilt "
-                f"({len(similarities)} media with collaborative similarities)."
-            )
-        )
+        self.stdout.write(self.style.SUCCESS("Recommendation caches rebuilt " f"({len(similarities)} media with collaborative similarities)."))
