@@ -12,7 +12,45 @@ from files.helpers import get_alphanumeric_and_spaces
 from files.models import Media, PlaylistMedia
 from files.recommendation_config import content_parameters
 
-ALGORITHM_VERSION = "tag_text_content_v1"
+ALGORITHM_VERSION = "tag_text_content_v2"
+MEDIA_EXTENSIONS = (
+    "mp4|m4v|mov|mkv|webm|avi|wmv|flv|mpg|mpeg|3gp|ts|m3u8|"
+    "mp3|m4a|wav|aac|flac|ogg|opus|wma|aiff|"
+    "jpg|jpeg|png|gif|webp|bmp|tif|tiff|svg|pdf"
+)
+MEDIA_SUFFIX_RE = re.compile(r"\.(?:" + MEDIA_EXTENSIONS + r")$", re.IGNORECASE)
+MEDIA_EXTENSION_IN_TEXT_RE = re.compile(
+    r"\.(?:" + MEDIA_EXTENSIONS + r")(?![A-Za-z0-9])", re.IGNORECASE
+)
+URL_RE = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
+FILENAME_URL_RE = re.compile(r"(?i)(?:^|[_\s])https?[_:./-]+[^\s]*")
+GENERIC_FILENAME_STEM_RE = re.compile(r"(?i)(?:public|private|unlisted|video\d*)")
+
+
+def clean_title_text(title):
+    """Remove file structure from filename-like titles while retaining names/text."""
+    text = html.unescape(strip_tags(title or "")).strip()
+    suffix = MEDIA_SUFFIX_RE.search(text)
+    if not suffix:
+        return text
+
+    stem = text[:suffix.start()].strip()
+    # These exact extension-bearing placeholders are upload/file labels, not
+    # descriptive titles. The words remain untouched in ordinary text or descriptive titles.
+    if GENERIC_FILENAME_STEM_RE.fullmatch(stem):
+        return ""
+    stem = FILENAME_URL_RE.sub(" ", stem)
+    # Drop opaque hashes/long numeric resource identifiers only when they are
+    # standalone filename components. Human names and ordinary numbers survive.
+    stem = re.sub(r"(?i)^\s*[a-f0-9]{24,}(?=[_. -])[_ .-]+", " ", stem)
+    stem = re.sub(r"^\s*\d{7,}(?=[_. -])[_ .-]+", " ", stem)
+    stem = re.sub(r"(?<![A-Za-z])\d{7,}(?![A-Za-z])", " ", stem)
+    return re.sub(r"[_]+", " ", stem)
+
+
+def text_document(title, description):
+    """Build title/description text without importing filename suffix noise."""
+    return clean_title_text(title) + " " + (description or "")
 
 
 def unit(vector):
@@ -31,7 +69,13 @@ def tokenize(text):
     import jieba
 
     text = html.unescape(strip_tags(text)).lower()
-    return [word for word in jieba.cut(text) if re.fullmatch(r"[^\W_]+", word)]
+    text = URL_RE.sub(" ", text)
+    text = FILENAME_URL_RE.sub(" ", text)
+    text = MEDIA_EXTENSION_IN_TEXT_RE.sub(" ", text)
+    return [
+        word for word in jieba.cut(text)
+        if re.fullmatch(r"[^\W_]+", word)
+    ]
 
 
 def text_vectors(documents):
@@ -102,7 +146,7 @@ def get_content_recommendations(user, limit=50, current_media_id=None):
     if not candidates:
         return []
     tags = {media.pk: tag_vector(tag.title for tag in media.tags.all()) for media in catalogue}
-    texts = text_vectors({media.pk: media.title + " " + media.description for media in catalogue}) if interactions else {}
+    texts = text_vectors({media.pk: text_document(media.title, media.description) for media in catalogue}) if interactions else {}
     tag_interest = profile(tags, interactions)
     text_interest = profile(texts, interactions)
     scores = {media.pk: combined_score(tag_interest, text_interest, tags[media.pk], texts.get(media.pk, {}), alpha)

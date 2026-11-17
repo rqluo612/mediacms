@@ -12,7 +12,8 @@ from actions.models import MediaAction, UserBehaviorLog
 from files.models import Media, Playlist, PlaylistMedia, Tag
 from files.recommendation_config import content_parameters, resolve_strategy
 from files.services.content_recommendations import (
-    combined_score, profile, tag_vector, text_vectors, tokenize, unit, user_interactions,
+    clean_title_text, combined_score, profile, tag_vector, text_document, text_vectors,
+    tokenize, unit, user_interactions,
 )
 from files.services.recommendations import get_recommended_media
 from users.models import User
@@ -23,6 +24,32 @@ class ContentMathTests(SimpleTestCase):
         self.assertEqual(tokenize('NATURE'), tokenize('nature'))
         self.assertIn('自然', tokenize('<p>自然 森林</p>'))
         self.assertEqual(tokenize('  !!! <b></b>'), [])
+
+    def test_filename_noise_is_removed_without_dropping_normal_terms(self):
+        tokens = tokenize(text_document('17416258_Matthias Groeneveld.mp4', '2024 public private Ada Lovelace'))
+        self.assertNotIn('17416258', tokens)
+        self.assertNotIn('mp4', tokens)
+        for retained in ('matthias', 'groeneveld', '2024', 'public', 'private', 'ada', 'lovelace'):
+            self.assertIn(retained, tokens)
+
+    def test_filename_structure_is_cleaned_contextually(self):
+        self.assertEqual(tokenize(clean_title_text('17416258_Matthias Groeneveld.mp4')),
+                         tokenize('Matthias Groeneveld'))
+        self.assertEqual(tokenize(text_document('8114282_https_kaboompics.com_.mp4', '')), [])
+        self.assertEqual(tokenize(text_document('video1.mp4', '')), [])
+        self.assertEqual(tokenize(text_document('public.mp4', 'Private viewing by Ada Lovelace in 2024')),
+                         tokenize('Private viewing by Ada Lovelace in 2024'))
+        self.assertEqual(tokenize(clean_title_text('Public transit and private viewing.mp4')),
+                         tokenize('Public transit and private viewing'))
+
+    def test_file_extension_stripping_does_not_remove_human_names_or_short_numbers(self):
+        self.assertEqual(tokenize('2024 travel with Ada Lovelace.mp4'),
+                         tokenize('2024 travel with Ada Lovelace'))
+        self.assertIn('12345678', tokenize('A collection contains 12345678 records'))
+        self.assertIn('mp4', tokenize('MP4 format is mentioned in prose'))
+        self.assertNotIn('mp4', tokenize('Attached sample.mp4.'))
+        self.assertIn('year', tokenize('2024 year 1080p'))
+        self.assertIn('public', tokenize('Public transport; private collection'))
 
     def test_tags_binary_cleaned_l2(self):
         self.assertEqual(tag_vector([' Nature ', 'nature', '自然']),
@@ -147,7 +174,7 @@ class ContentRecommendationTests(TestCase):
             result = self.recommendations()
         self.assertEqual([m.pk for m in result], [self.match.pk])
         self.assertEqual(result[0].recommendation_algorithm_id, 'CONTENT')
-        self.assertEqual(result[0].recommendation_algorithm_version, 'tag_text_content_v1')
+        self.assertEqual(result[0].recommendation_algorithm_version, 'tag_text_content_v2')
         cf.assert_not_called()
 
     def test_dedup_and_dislike_removes_all_positive_interest(self):
@@ -228,7 +255,7 @@ class ContentRecommendationTests(TestCase):
         item = response.json()['results'][0]
         context = item['behavior_context']
         self.assertEqual(context['algorithm_id'], 'CONTENT')
-        self.assertEqual(context['algorithm_version'], 'tag_text_content_v1')
+        self.assertEqual(context['algorithm_version'], 'tag_text_content_v2')
         self.assertEqual(context['recommendation_rank'], 1)
         detail = self.client.get('/api/v1/media/' + self.seed.friendly_token)
         self.assertEqual(detail.status_code, 200)
@@ -242,7 +269,7 @@ class ContentRecommendationTests(TestCase):
         self.assertEqual(response.status_code, 201)
         log = UserBehaviorLog.objects.get(interaction_id=response.json()['interaction_id'])
         self.assertEqual(log.algorithm_id, 'CONTENT')
-        self.assertEqual(log.algorithm_version, 'tag_text_content_v1')
+        self.assertEqual(log.algorithm_version, 'tag_text_content_v2')
         self.assertEqual(str(log.recommendation_request_id), context['recommendation_request_id'])
         self.assertEqual(log.recommendation_rank, 1)
 

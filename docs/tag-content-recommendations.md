@@ -51,7 +51,7 @@ docker compose -f docker-compose-dev.yaml up -d --no-deps --force-recreate web
 - 各通道对有非零向量的历史视频按行为总权重求加权平均，画像再L2归一化，用点积计算余弦。分数为alpha*标签余弦+(1-alpha)*文本余弦。
 - 某通道画像或候选向量为零则缺失，仅在向量有效且通道权重大于0的通道内重新归一化权重。有效向量的相似度为0仍计入分母；alpha为0/1不会偷偷启用被关闭的通道。
 - 排除已看、已点赞、已收藏、点踩及当前视频后再截取；正分结果按分数降序、发布时间降序、ID升序，允许短列表，不混入热门或CF。
-- 无画像/无正分匹配时，用同样过滤口径按views、likes、发布时间降序和ID升序回退热门；耗尽返回空列表，不补回已看。正分结果标记CONTENT/tag_text_content_v1，回退标记LEGACY/空版本。
+- 无画像/无正分匹配时，用同样过滤口径按views、likes、发布时间降序和ID升序回退热门；耗尽返回空列表，不补回已看。正分结果标记CONTENT/tag_text_content_v2，回退标记LEGACY/空版本。
 - 实时批量读取（用户行为、收藏、视频+user、tags共至多4次服务查询），没有CONTENT持久索引、排序缓存、缓存失效机制或CF缓存访问。内容编辑后下一次请求重算。原有签名归因缓存继续用于日志归因，不是CONTENT排序缓存。
 - 签名、请求UUID、分页后排名、自动下一条及UserBehaviorLog写入均复用已有实现；不新增表，不改变分页排名含义。
 
@@ -69,7 +69,7 @@ docker compose -f docker-compose-dev.yaml exec -T web /home/mediacms.io/bin/pyth
 
 浏览器验收（本地现已获授权启用CONTENT，具体当前状态见末节）：
 
-1. 登录本地账号访问http://localhost，打开推荐列表；检查Network响应中的behavior_context是否为CONTENT/tag_text_content_v1，正分不足时允许短列表。
+1. 登录本地账号访问http://localhost，打开推荐列表；检查Network响应中的behavior_context是否为CONTENT/tag_text_content_v2，正分不足时允许短列表。
 2. 在独立测试数据中准备同标签不同文本、同文本不同标签、仅一个通道的候选；分别设置alpha=0/0.5/1并重建web容器，比较排序。
 3. 播放并点赞/收藏视频，再请求列表，确认排除；修改候选标题/简介/标签后刷新确认重新计算。
 4. 在媒体详情检查autoplay_next排除当前视频；播放推荐项后核对行为日志CONTENT、版本、请求编号和排名。无匹配时应是LEGACY且版本为空。
@@ -126,7 +126,7 @@ services:
 docker compose -f docker-compose-dev.yaml -f docker-compose-content-dev.yaml up -d --no-deps --force-recreate web
 ```
 
-切换后：运行策略content、版本tag_text_content_v1、jieba0.42.1、alpha0.5。web使用上述派生镜像，首页http://localhost/返回HTTP200。
+切换时：运行策略content、当时版本tag_text_content_v1、jieba0.42.1、alpha0.5。web使用上述派生镜像，首页http://localhost/返回HTTP200。
 临时覆盖文件现已持久化为项目根目录docker-compose-content-dev.yaml，Dockerfile保存在deploy/docker/content-dev/。后续命令改用项目内覆盖文件，不再依赖/tmp。不要在CONTENT启用时无意改回缺少jieba的原镜像。
 
 ### 现有数据只读验证
@@ -140,7 +140,7 @@ docker compose -f docker-compose-dev.yaml -f docker-compose-content-dev.yaml up 
 ### 浏览器步骤
 
 1. 访问http://localhost/，建议使用已有账号1111，使用自己已知的密码登录。
-2. 打开推荐列表，并在开发者工具Network中查看/api/v1/media?show=recommended响应；当前预期「落日背影」的behavior_context.algorithm_id为CONTENT，algorithm_version为tag_text_content_v1。
+2. 打开推荐列表，并在开发者工具Network中查看/api/v1/media?show=recommended响应；检查正分命中是否标记CONTENT/tag_text_content_v2。历史行为会影响当前候选，不固定预期标题；无正分匹配时应标记LEGACY/空版本。
 3. 打开http://localhost/view?m=upload-b5a5a23f24b35fab9837d5f92c194f01（视频66），在详情API响应中检查autoplay_next及其CONTENT归因，再测试自动下一条。
 4. 可用已有账号abcde对照回退：algorithm_id应为LEGACY，algorithm_version为空。不要将这组结果当成内容匹配。
 5. 播放会按原业务产生观看行为；67一旦被观看，下一次请求可能排除它而变为回退或空列表，这是CONTENT耗尽规则。
@@ -194,3 +194,16 @@ docker compose -f docker-compose-dev.yaml -f docker-compose-content-dev.yaml up 
 ### 尚未验证 / 尚待人工确认
 
 尚未在浏览器Network面板将用户操作与具体推荐响应逐项对应，也尚未确认是否从推荐列表点击了67、视频8是否由自动下一条触发。不得把相邻播放日志当作自动播放证据。已通过只读记录确认签名字段与各自播放日志一致、两条已看视频在后续推荐计算中被排除；接口层也验证了67曾作为CONTENT正分结果进入列表和autoplay_next。没有新增第二轮播放、没有改写已有日志补全结束时间.
+## 文本噪声清理（tag_text_content_v2）
+
+第一轮只读评分发现，旧标题中的`mp4`、长资源编号、URL导出文件名以及`public.mp4`/`private.mp4`/`unlisted.mp4`等文件占位标题可造成弱文本匹配。v2仅调整文本通道，标签向量、候选过滤、CF实现、策略配置和当前运行开关均保持不变。
+
+- 标题仅在以明确媒体扩展名结尾时按文件名处理：移除扩展名；清理独立的7位以上资源编号或24位以上十六进制哈希前缀；把下划线还原为空格；过滤`https_...`类URL文件名部分。保留扩展名之前的普通文本和人名。
+- 完全等于`public.mp4`、`private.mp4`、`unlisted.mp4`或`video<数字>.mp4`的占位标题视为空文本；这些词在普通标题、简介和复合标题中保留。
+- 文本中的明确点分媒体扩展名（如`.mp4`、`.mp3`、`.pdf`）不进入词表；扩展名文件标题里的7位以上纯编号前缀会清理。普通文本中的数字（包括较长数字）、英文、人名、年份，以及`public`/`private`等普通词不作为通用停用词删除。
+- IDF拟合范围与双路评分公式不变；不从文件路径引入新特征。正分归因版本升为`tag_text_content_v2`，以区别旧清理规则下的评分。已有v1行为日志保持原版本记录。
+
+噪声清理相关测试覆盖扩展名、长编号、哈希/URL文件名结构、占位文件标题，以及人名、正常英文、public/private与短数字保留。最新具体测试结果以本轮交付说明为准；第一轮评分CSV是v1历史快照，v2启用后排序可能改变，应在新的只读快照下重新生成。
+
+
+本轮验证（2026-11-17）：`docker compose -f docker-compose-dev.yaml -f docker-compose-content-dev.yaml exec -T web /home/mediacms.io/bin/python tests/run_recommendation_tests.py tests.services.test_content_recommendations` 通过，29项测试全部成功；包含原内容推荐服务/API归因测试和新增文本噪声清理用例。`git diff --check`通过。未重复运行未受文本通道影响的CF测试。容器运行策略仍为CONTENT；新请求使用`tag_text_content_v2`。第一轮CSV保留为v1历史快照。
