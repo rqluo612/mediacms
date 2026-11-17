@@ -278,9 +278,9 @@ def _fill_with_fallback(personalized, request, excluded_ids, limit):
     return result
 
 
-def get_recommended_media(request, limit=50):
+def _get_original_recommendations(request, limit=50, enabled=None):
     """Recommendation strategy entry point with safe fallback to legacy behavior."""
-    if not getattr(settings, "ENABLE_COLLABORATIVE_FILTERING", False):
+    if not (getattr(settings, "ENABLE_COLLABORATIVE_FILTERING", False) if enabled is None else enabled):
         result = show_recommended_media(request, limit=limit)
         for media in result:
             media.recommendation_algorithm_id = "LEGACY"
@@ -309,3 +309,16 @@ def get_recommended_media(request, limit=50):
             media.recommendation_algorithm_id = "LEGACY"
             media.recommendation_algorithm_version = ""
         return result
+
+
+def get_recommended_media(request, limit=50, current_media_id=None):
+    """Single strategy dispatcher; original CF/legacy logic remains isolated."""
+    from ..recommendation_config import resolve_strategy
+    strategy = resolve_strategy(
+        getattr(settings, "RECOMMENDATION_STRATEGY", ""),
+        getattr(settings, "ENABLE_COLLABORATIVE_FILTERING", False),
+    )
+    if strategy == "content":
+        from .content_recommendations import get_content_recommendations
+        return get_content_recommendations(request.user, limit, current_media_id)
+    return _get_original_recommendations(request, limit, enabled=strategy == "cf")

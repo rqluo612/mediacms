@@ -919,7 +919,7 @@ class MediaDetail(APIView):
         autoplay_next = None
         if request.user.is_authenticated:
             recommendation_request_id = uuid.uuid4()
-            candidates = get_recommended_media(request, limit=50)
+            candidates = get_recommended_media(request, limit=50, current_media_id=media.pk)
             for rank, candidate in enumerate(candidates, start=1):
                 if candidate.pk == media.pk:
                     continue

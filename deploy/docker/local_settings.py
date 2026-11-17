@@ -77,3 +77,11 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', Fals
 SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', False)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
+
+# Empty preserves the original ENABLE_COLLABORATIVE_FILTERING switch.
+RECOMMENDATION_STRATEGY = os.getenv("RECOMMENDATION_STRATEGY", "").strip()
+CONTENT_RECOMMENDATION_ALPHA = os.getenv("CONTENT_RECOMMENDATION_ALPHA", "0.5")
+CONTENT_RECOMMENDATION_WEIGHTS = {
+    action: os.getenv("CONTENT_RECOMMENDATION_" + action.upper() + "_WEIGHT", str(default))
+    for action, default in {"watch": 1, "like": 3, "playlist": 4}.items()
+}

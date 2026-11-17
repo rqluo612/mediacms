@@ -1,0 +1,7 @@
+# Combine with docker-compose-dev.yaml; this file does not enable CONTENT.
+services:
+  web:
+    image: mediacms/mediacms-dev:content-local
+    build:
+      context: ./deploy/docker/content-dev
+      dockerfile: Dockerfile
