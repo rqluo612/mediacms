@@ -17,6 +17,9 @@ jobs:
         umask 077
         printf 'SECRET_KEY=%s\nPOSTGRES_DB=mediacms\nPOSTGRES_USER=mediacms\n' "$(openssl rand -hex 32)" > .env
         : > frontend/.env
+        # The container entrypoint chowns the mounted checkout; Compose still
+        # needs to read these disposable files from the host in later steps.
+        chmod 644 .env frontend/.env
 
     - name: Build the Stack
       run:  docker compose -f docker-compose-dev.yaml build
