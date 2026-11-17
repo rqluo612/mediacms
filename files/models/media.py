@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import uuid
+from functools import partial
 
 import m3u8
 from django.conf import settings
@@ -554,6 +555,8 @@ class Media(models.Model):
 
         from .. import tasks
 
+        # Workers use separate DB connections: publish only after Encoding rows
+        # are committed. partial binds each loop iteration before it advances.
         # attempt to break media file in chunks
         if self.duration > settings.CHUNKIZE_VIDEO_DURATION and chunkize:
             for profile in profiles:
@@ -561,13 +564,14 @@ class Media(models.Model):
                     profiles.remove(profile)
                     encoding = Encoding(media=self, profile=profile)
                     encoding.save()
-                    tasks.encode_media.apply_async(
+                    transaction.on_commit(partial(
+                        tasks.encode_media.apply_async,
                         args=[self.friendly_token, profile.id, encoding.id],
                         kwargs={"force": force},
                         priority=0,
-                    )
+                    ))
             profiles = [p.id for p in profiles]
-            tasks.chunkize_media.delay(self.friendly_token, profiles, force=force)
+            transaction.on_commit(partial(tasks.chunkize_media.delay, self.friendly_token, profiles, force=force))
         else:
             for profile in profiles:
                 if profile.extension != "gif":
@@ -580,11 +584,12 @@ class Media(models.Model):
                     priority = 9
                 else:
                     priority = 0
-                tasks.encode_media.apply_async(
+                transaction.on_commit(partial(
+                    tasks.encode_media.apply_async,
                     args=[self.friendly_token, profile.id, encoding.id],
                     kwargs={"force": force},
                     priority=priority,
-                )
+                ))
 
         return True
 
